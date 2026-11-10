@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>Athlétisme 12 points</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#D2411B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Athlétisme">
 </head>
 <body>
 <style>
@@ -193,6 +200,22 @@ tr:last-child td{border-bottom:0}
 .hint{font-size:14px;color:var(--muted)}
 @media (max-width:560px){.topbar .pill{font-size:0;gap:0;padding:7px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* couleur par élève */
+.tile.stu{border-left-width:8px;border-left-color:var(--sc);background:color-mix(in srgb,var(--sc) 14%,var(--surface))}
+.tile.stu:hover{border-color:var(--sc)}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--sc);margin-right:8px;vertical-align:-1px;flex:none}
+.band{height:8px;border-radius:99px;background:var(--sc)}
+/* saisie d'un résultat */
+.addrow{display:flex;gap:10px;align-items:stretch}
+.addrow input{font-family:var(--f-display);font-size:28px;font-weight:600;min-height:56px;text-align:center}
+.addrow .btn{min-height:56px;flex:none}
+.reslist{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.res{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.res .k{width:26px;text-align:center;font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--muted);flex:none}
+.res .v{flex:1;min-width:0;font-family:var(--f-display);font-weight:700;font-size:26px;line-height:1.1}
+.res input{flex:1;min-width:0;min-height:44px;font-family:var(--f-display);font-size:22px;font-weight:600}
+.res .btn.small{padding:4px 10px;flex:none}
 </style>
 
 <div id="app"></div>
@@ -250,7 +273,12 @@ function normS(s){
   return s;
 }
 const normC=c=>{c=c||{};c.nom=c.nom||'Classe';c.eleves=Array.isArray(c.eleves)?c.eleves:[];c.seances=Array.isArray(c.seances)?c.seances:[];
-  c.eleves.forEach(e=>{e.poly=Array.isArray(e.poly)?e.poly:[null,null];e.res=e.res||{}});return c};
+  c.eleves.forEach(e=>{e.poly=Array.isArray(e.poly)?e.poly:[null,null];e.res=e.res||{};
+    Object.keys(e.res).forEach(k=>{e.res[k]=(Array.isArray(e.res[k])?e.res[k]:[]).map(en=>{en.e=(Array.isArray(en.e)?en.e:[]).filter(v=>v!=null&&!isNaN(v));return en}).filter(en=>en.e.length)})});
+  assignCi(c);return c};
+function assignCi(c){let mx=-1;c.eleves.forEach(e=>{if(typeof e.ci==='number')mx=Math.max(mx,e.ci)});c.eleves.forEach(e=>{if(typeof e.ci!=='number')e.ci=++mx})}
+const LS=[46,58,38];
+const stuCol=el=>{const i=typeof el.ci==='number'?el.ci:0;return `hsl(${Math.round((i*137.508)%360)} 70% ${LS[i%3]}%)`};
 
 /* ============ calculs ============ */
 function seuils(ep,sx){
@@ -284,8 +312,9 @@ function finale(el){
 const epById=id=>S.epreuves.find(e=>e.id===id);
 const sortEleves=c=>c.eleves.slice().sort((a,b)=>(a.nom+' '+a.prenom).localeCompare(b.nom+' '+b.prenom,'fr'));
 const fullName=e=>e.prenom+' '+e.nom.toUpperCase();
+const nbRes=(el,k,sid)=>entriesOf(el,k).reduce((q,e)=>q+(e.s===sid?e.e.length:0),0);
 const openSess=c=>c.seances.find(s=>!s.closed);
-const sessCount=(c,sid)=>c.eleves.reduce((n,el)=>n+Object.keys(el.res).reduce((m,k)=>m+entriesOf(el,k).filter(e=>e.s===sid).length,0),0);
+const sessCount=(c,sid)=>c.eleves.reduce((n,el)=>n+Object.keys(el.res).reduce((m,k)=>m+nbRes(el,k,sid),0),0);
 
 function rankActivity(c,sid,ep,sexF){
   const rows=[];
@@ -380,8 +409,11 @@ function initCloud(db,uidv){
   });
   slowT=setTimeout(()=>{slow=true;if(!loaded)render()},10000);
 }
+function regSW(){if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{})}
 async function boot(){
   render();
+  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
+  if(document.readyState==='complete')regSW();else window.addEventListener('load',regSW);
   let db=null,u=null,uidv=null;
   
   if(db&&uidv)initCloud(db,uidv);else initLocal();
@@ -444,13 +476,13 @@ function vClass(){
 function tEleves(c,s){
   const list=sortEleves(c);
   const tiles=list.map(el=>{
-    const n=s?Object.keys(el.res).reduce((m,k)=>m+entriesOf(el,k).filter(e=>e.s===s.id).length,0):0;
+    const n=s?Object.keys(el.res).reduce((m,k)=>m+nbRes(el,k,s.id),0):0;
     const chips=[];
     const sp=epById(el.spe);if(sp)chips.push(`<span class="chip spe">${esc(sp.nom)}</span>`);
     el.poly.forEach(p=>{const e=epById(p);if(e)chips.push(`<span class="chip poly">${esc(e.nom)}</span>`)});
     if(!el.sexe)chips.push('<span class="chip warn">sexe ?</span>');
     else if(!sp)chips.push('<span class="chip warn">activités ?</span>');
-    return `<button class="tile" data-act="open-student" data-id="${el.id}">${n?`<span class="done" title="Saisies de la séance">${n}</span>`:''}<b>${esc(el.prenom)}</b><small>${esc(el.nom)}</small><span class="chips">${chips.join('')}</span></button>`}).join('');
+    return `<button class="tile stu" style="--sc:${stuCol(el)}" data-act="open-student" data-id="${el.id}">${n?`<span class="done" title="Saisies de la séance">${n}</span>`:''}<b>${esc(el.prenom)}</b><small>${esc(el.nom)}</small><span class="chips">${chips.join('')}</span></button>`}).join('');
   if(!list.length)return `<div class="empty"><h3>Classe vide</h3><p>Ajoute les élèves dans l’onglet Gérer, en collant ta liste.</p><div style="margin-top:12px"><button class="btn" data-act="tab" data-t="gerer">Ajouter des élèves</button></div></div>`;
   return `<div class="grid">${tiles}</div>`;
 }
@@ -468,14 +500,14 @@ function tNotes(c){
   const cell=(el,id)=>{const ep=epById(id);if(!ep)return '<td class="muted">–</td>';const n=bestNote(el,ep);return `<td class="n"><span class="cellep">${esc(ep.nom)}</span>${n==null?'<span class="muted">–</span>':fmtN(n)}</td>`};
   const rows=list.map(el=>{
     const f=finale(el);const au=f.parts.autres;
-    return `<tr><td><b>${esc(el.prenom)}</b> ${esc(el.nom.toUpperCase())}</td>${cell(el,el.spe)}${cell(el,el.poly[0])}${cell(el,el.poly[1])}<td class="n">${au==null?'<span class="muted">–</span>':fmtN(au)}</td><td class="n" style="color:var(--accent)">${f.val==null?'<span class="muted">–</span>':fmtN(rnd(f.val))}</td></tr>`}).join('');
+    return `<tr><td><span class="dot" style="--sc:${stuCol(el)}"></span><b>${esc(el.prenom)}</b> ${esc(el.nom.toUpperCase())}</td>${cell(el,el.spe)}${cell(el,el.poly[0])}${cell(el,el.poly[1])}<td class="n">${au==null?'<span class="muted">–</span>':fmtN(au)}</td><td class="n" style="color:var(--accent)">${f.val==null?'<span class="muted">–</span>':fmtN(rnd(f.val))}</td></tr>`}).join('');
   return `<div class="stack"><div class="row" style="justify-content:space-between"><p class="hint">Meilleure performance de chaque activité, notée sur 12. Pondération : spécialité ${esc(S.coefs.spe)} %, polyvalence ${esc(S.coefs.poly)} %, autres ${esc(S.coefs.autres)} %.</p><button class="btn" data-act="export">Exporter (CSV pour Excel)</button></div>
   <div class="tablewrap"><table><thead><tr><th>Élève</th><th>Spécialité</th><th>Polyvalence 1</th><th>Polyvalence 2</th><th>Autres (moy.)</th><th>Note /12</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 const optEp=sel=>`<option value="">–</option>`+S.epreuves.map(e=>`<option value="${esc(e.id)}"${e.id===sel?' selected':''}>${esc(e.nom)}</option>`).join('');
 function tGerer(c){
   const list=sortEleves(c);
-  const rows=list.map(el=>`<tr><td><button class="btn small ghost" data-act="edit-student" data-id="${el.id}"><b>${esc(el.prenom)}</b>&nbsp;${esc(el.nom.toUpperCase())}</button></td>
+  const rows=list.map(el=>`<tr><td><button class="btn small ghost" data-act="edit-student" data-id="${el.id}"><span class="dot" style="--sc:${stuCol(el)}"></span><b>${esc(el.prenom)}</b>&nbsp;${esc(el.nom.toUpperCase())}</button></td>
    <td><select aria-label="Sexe de ${esc(el.prenom)}" data-chg="stu-sexe" data-id="${el.id}" style="min-width:70px"><option value="">?</option><option value="F"${el.sexe==='F'?' selected':''}>F</option><option value="G"${el.sexe==='G'?' selected':''}>G</option></select></td>
    <td><select aria-label="Spécialité de ${esc(el.prenom)}" data-chg="stu-ch" data-f="spe" data-id="${el.id}">${optEp(el.spe)}</select></td>
    <td><select aria-label="Polyvalence 1 de ${esc(el.prenom)}" data-chg="stu-ch" data-f="p0" data-id="${el.id}">${optEp(el.poly[0])}</select></td>
@@ -495,11 +527,10 @@ function tGerer(c){
 function vStudent(){
   const c=C[ui.classId],el=c.eleves.find(x=>x.id===ui.sid);
   if(!el){ui.view='class';return vClass()}
-  const f=finale(el),s=openSess(c);
+  const s=openSess(c);
   const card=(ep,role,label)=>{
-    const best=bestPerf(el,ep),note=el.sexe&&best!=null?noteOf(ep,el.sexe,best):null;
-    const today=s&&entriesOf(el,ep.id).some(e=>e.s===s.id);
-    return `<button class="act ${role}" data-act="entry" data-ep="${esc(ep.id)}"><span class="role">${label}</span><b>${esc(ep.nom)}</b><small>${esc(ep.lib)}</small><span class="val num">${best!=null?esc(fmtPerf(best,ep.u)):'<span class="muted">Pas de résultat</span>'}</span><span class="pts num">${note!=null?fmtN(note)+'<i>/12</i>':''}</span>${today?'<em>Saisi à cette séance</em>':''}</button>`;
+    const best=bestPerf(el,ep),n=s?nbRes(el,ep.id,s.id):0;
+    return `<button class="act ${role}" data-act="entry" data-ep="${esc(ep.id)}"><span class="role">${label}</span><b>${esc(ep.nom)}</b><small>${esc(ep.lib)}</small><span class="val num">${best!=null?esc(fmtPerf(best,ep.u)):'<span class="muted">Pas de résultat</span>'}</span>${n?`<em>${n} résultat${n>1?'s':''} à cette séance</em>`:''}</button>`;
   };
   const sp=epById(el.spe),p0=epById(el.poly[0]),p1=epById(el.poly[1]);
   const chosen=[sp,p0,p1].filter(Boolean);
@@ -508,12 +539,9 @@ function vStudent(){
   if(sp)cards.push(card(sp,'spe','Spécialité'));
   if(p0)cards.push(card(p0,'poly','Polyvalence'));
   if(p1)cards.push(card(p1,'poly','Polyvalence'));
-  const part=(k,l)=>`<span class="chip${k==='spe'?' spe':k==='poly'?' poly':''}">${l} ${f.parts[k]==null?'–':fmtN(f.parts[k])}</span>`;
   return `<div class="wrap">${topbar(fullName(el),'back-class',`<button class="btn small" data-act="edit-student" data-id="${el.id}">Modifier</button>`)}
   <div class="page">
-   <section class="card final"><div><p class="lbl">Note finale</p><div class="big num">${f.val==null?'–':fmtN(rnd(f.val))}<i>/12</i></div></div>
-    <div class="stack" style="gap:8px"><div class="chips" style="padding:0">${part('spe','Spé.')}${part('poly','Poly.')}${part('autres','Autres')}</div>
-    <p class="hint">${f.val==null?'Aucune activité notée pour le moment.':'Soit '+fmtN(rnd(f.val)*20/12,1)+' sur 20. Meilleure performance de chaque activité.'}</p></div></section>
+   <div class="band" style="--sc:${stuCol(el)}"></div>
    ${!el.sexe?`<div class="banner">Choisis le sexe de l’élève pour calculer les notes. <button class="btn small" data-act="edit-student" data-id="${el.id}">Choisir</button></div>`:''}
    ${!sp?`<div class="banner">Pas encore de spécialité ni de polyvalence. <button class="btn small" data-act="edit-student" data-id="${el.id}">Choisir les activités</button></div>`:''}
    ${cards.length?`<section class="stack"><h2>Ses activités</h2><div class="acts">${cards.join('')}</div></section>`:''}
@@ -613,33 +641,24 @@ function vModal(){
     const c=C[ui.classId],el=c.eleves.find(x=>x.id===m.sid),ep=epById(m.epId);
     if(!el||!ep)return '';
     const s=openSess(c),cur=s?entriesOf(el,ep.id).find(e=>e.s===s.id):null;
-    const past=entriesOf(el,ep.id).filter(e=>!cur||e!==cur).map(e=>({e,s:c.seances.find(x=>x.id===e.s)})).filter(x=>x.s).sort((a,b)=>b.s.ts-a.s.ts);
-    const sx=el.sexe;
-    const hint=sx?`Barème ${sx==='F'?'filles':'garçons'} : 0 pt = ${esc(fmtPerf(ep[sx].z,ep.u))} · 12 pts = ${esc(fmtPerf(ep[sx].t,ep.u))}`:'';
-    const best=bestPerf(el,ep);
-    inner=`<div><p class="eyebrow">${esc(ep.lib||'')}</p><h2>${esc(ep.nom)}</h2><p class="muted">${esc(fullName(el))}${sx?' · '+sx:''}</p></div>
-    ${!sx?`<div class="banner">Pour calculer la note, indique d’abord le sexe de l’élève.</div><div class="row"><button class="btn" data-act="entry-sex" data-v="F">Fille</button><button class="btn" data-act="entry-sex" data-v="G">Garçon</button></div>`:`
-    <p class="hint">${hint}</p>
-    <div class="trials">${[0,1,2].map(i=>`<div class="field"><label for="essai${i}">Essai ${i+1}</label><input type="text" id="essai${i}" inputmode="decimal" autocomplete="off" placeholder="${ep.u==='s'?'ex. 8,45':'ex. 4,20'}" value="${esc(fmtIn(cur&&cur.e[i],ep.u))}" data-live="entry"></div>`).join('')}</div>
-    <div class="preview" aria-live="polite"><div><p class="lbl">Meilleure performance</p><p id="pv-perf" class="num" style="font-weight:600;font-size:20px">–</p></div><div class="pts num" id="pv-pts">–</div></div>
+    const list=cur?cur.e:[],sx=el.sexe;
+    const past=entriesOf(el,ep.id).filter(e=>e!==cur).map(e=>({e,s:c.seances.find(x=>x.id===e.s)})).filter(x=>x.s).sort((a,b)=>b.s.ts-a.s.ts);
+    const rows=list.map((v,i)=>m.edit===i
+      ?`<div class="res"><span class="k">${i+1}</span><input type="text" id="edit-val" inputmode="decimal" autocomplete="off" value="${esc(fmtIn(v,ep.u))}" aria-label="Corriger le résultat ${i+1}" data-live="entry" data-enter="entry-edit-ok"><button class="btn small primary" data-act="entry-edit-ok">OK</button><button class="btn small" data-act="entry-edit-cancel">Annuler</button></div>`
+      :`<div class="res"><span class="k">${i+1}</span><span class="v num">${esc(fmtPerf(v,ep.u))}</span><button class="btn small" data-act="entry-edit" data-i="${i}" aria-label="Corriger le résultat ${i+1}">Corriger</button><button class="btn small danger" data-act="entry-del" data-i="${i}" aria-label="Supprimer le résultat ${i+1}">Supprimer</button></div>`).join('');
+    inner=`<div><p class="eyebrow">${esc(ep.lib||'')}</p><h2>${esc(ep.nom)}</h2><p class="muted">${esc(fullName(el))}</p></div>
+    <div class="field"><label for="essai">Nouveau résultat${ep.u?' ('+esc(ep.u)+')':''}</label><div class="addrow"><input type="text" id="essai" inputmode="decimal" autocomplete="off" placeholder="${ep.u==='s'?'ex. 8,45':'ex. 4,20'}" data-live="entry" data-enter="entry-add"><button class="btn primary" data-act="entry-add">Ajouter</button></div></div>
     <p class="err" id="merr"></p>
-    <div class="row" style="justify-content:space-between">${cur?'<button class="btn danger small" data-act="entry-clear">Effacer cette saisie</button>':'<span></span>'}<span class="row"><button class="btn" data-act="close">Annuler</button><button class="btn primary" data-act="entry-save">Enregistrer</button></span></div>`}
-    ${past.length||best!=null?`<div><p class="lbl" style="margin-bottom:6px">Historique${best!=null?' · meilleure perf '+esc(fmtPerf(best,ep.u)):''}</p><div class="hist">${past.map(({e,s:ss})=>{const p=bestOf(ep,sx,e.e);return `<div><span>${esc(fmtDate(ss.date))}</span><span class="num"><b>${esc(fmtPerf(p,ep.u))}</b>${sx?' · '+fmtN(noteOf(ep,sx,p))+'/12':''}</span><button class="btn small ghost" data-act="entry-del-old" data-s="${esc(e.s)}" aria-label="Supprimer cette saisie">Retirer</button></div>`}).join('')}</div></div>`:''}`;
+    <div><p class="lbl" style="margin-bottom:6px">Résultats de cette séance${list.length?' · '+list.length:''}</p>${list.length?`<div class="reslist">${rows}</div>`:'<p class="hint">Aucun résultat pour l’instant. Tu peux en ajouter autant que tu veux.</p>'}</div>
+    ${past.length?`<div><p class="lbl" style="margin-bottom:6px">Séances précédentes</p><div class="hist">${past.map(({e,s:ss})=>{const p=bestOf(ep,sx,e.e);return `<div><span>${esc(fmtDate(ss.date))}</span><span class="num"><b>${esc(fmtPerf(p,ep.u))}</b>${e.e.length>1?' · '+e.e.length+' résultats':''}</span><button class="btn small ghost" data-act="entry-del-old" data-s="${esc(e.s)}" aria-label="Supprimer cette saisie">Retirer</button></div>`}).join('')}</div></div>`:''}
+    <div class="row" style="justify-content:flex-end"><button class="btn" data-act="close">Terminé</button></div>`;
   }
   return `<div class="layer" data-act="backdrop"><div class="sheet" role="dialog" aria-modal="true">${inner}</div></div>`;
 }
-function openModal(m){ui.modal=m;render();const t=$layer.querySelector('#essai0')||$layer.querySelector('input[type=text]');if(t)t.focus();if(m.type==='entry')livePreview()}
+function openModal(m){ui.modal=m;render();focusModal()}
 function closeModal(){ui.modal=null;if(pendingRender){pendingRender=false}render()}
 function confirmBox(title,text,ok,fn){openModal({type:'confirm',title,text,ok,fn})}
-function livePreview(){
-  const m=ui.modal;if(!m||m.type!=='entry')return;
-  const el=C[ui.classId].eleves.find(x=>x.id===m.sid),ep=epById(m.epId);if(!el||!el.sexe||!document.getElementById('essai0'))return;
-  const vals=[0,1,2].map(i=>parsePerf(document.getElementById('essai'+i).value));
-  const ok=vals.filter(v=>v!=null&&!isNaN(v));
-  const P=document.getElementById('pv-perf'),N=document.getElementById('pv-pts');
-  if(!ok.length){P.textContent='–';N.textContent='–';return}
-  const b=bestOf(ep,el.sexe,ok);P.textContent=fmtPerf(b,ep.u);N.innerHTML=fmtN(noteOf(ep,el.sexe,b))+'<i>/12</i>';
-}
+function focusModal(){const t=$layer.querySelector('#edit-val')||$layer.querySelector('#essai')||$layer.querySelector('input[type=text]');if(t){t.focus();if(t.id==='edit-val')t.select()}}
 
 /* ============ actions ============ */
 function curClass(){return C[ui.classId]}
@@ -689,28 +708,40 @@ function act(a,d,t,e){
       const vals={prenom:p,nom:n,sexe:ui.modal.sexe||null};
       const sel=['ss','s0','s1'].map(i=>document.getElementById(i).value||null);
       let el;
-      if(ui.modal.sid)el=c.eleves.find(x=>x.id===ui.modal.sid);else{el={id:uid(),spe:null,poly:[null,null],res:{}};c.eleves.push(el)}
+      if(ui.modal.sid)el=c.eleves.find(x=>x.id===ui.modal.sid);else{el={id:uid(),spe:null,poly:[null,null],res:{}};c.eleves.push(el);assignCi(c)}
       Object.assign(el,vals);el.spe=null;el.poly=[null,null];
       setChoice(el,'spe',sel[0]);setChoice(el,'p0',sel[1]);setChoice(el,'p1',sel[2]);
       saveC();ui.modal=null;render();toast('Élève enregistré');break}
     case 'del-student':{const id=ui.modal.sid;confirmBox('Supprimer l’élève','Ses résultats seront supprimés aussi.','Supprimer',()=>{c.eleves=c.eleves.filter(x=>x.id!==id);saveC();ui.modal=null;go('class',{tab:'gerer'})});break}
-    case 'bulk-add':{const list=parseList(document.getElementById('bulk').value);if(!list.length){toast('Colle d’abord ta liste');return}c.eleves.push.apply(c.eleves,list);saveC();render();toast(list.length+' élève'+(list.length>1?'s ajoutés':' ajouté'));break}
+    case 'bulk-add':{const list=parseList(document.getElementById('bulk').value);if(!list.length){toast('Colle d’abord ta liste');return}c.eleves.push.apply(c.eleves,list);assignCi(c);saveC();render();toast(list.length+' élève'+(list.length>1?'s ajoutés':' ajouté'));break}
     case 'del-class':confirmBox('Supprimer la classe','Tous les élèves et résultats de cette classe seront supprimés.','Supprimer la classe',()=>{const id=ui.classId;delete C[id];dirty.delete(id);adapter.remove(id).catch(()=>{});ui.modal=null;go('home')});break;
     case 'confirm-yes':{const f=ui.modal.fn;f();break}
     case 'entry':{const el=c.eleves.find(x=>x.id===ui.sid);openModal({type:'entry',sid:el.id,epId:d.ep});break}
-    case 'entry-sex':{const el=c.eleves.find(x=>x.id===ui.modal.sid);el.sexe=d.v;saveC();render();livePreview();break}
-    case 'entry-save':{
+    case 'entry-add':{
       const m=ui.modal,el=c.eleves.find(x=>x.id===m.sid),ep=epById(m.epId);
-      const vals=[0,1,2].map(i=>parsePerf(document.getElementById('essai'+i).value));
-      let bad=false;vals.forEach((v,i)=>{const f=document.getElementById('essai'+i);const b=Number.isNaN(v);f.classList.toggle('bad',b);if(b)bad=true});
-      const err=document.getElementById('merr');
-      if(bad){err.textContent='Une valeur est illisible. Exemples : 8,45 · 4,20 · 1:05,3';return}
-      if(!vals.some(v=>v!=null)){err.textContent='Saisis au moins un essai.';return}
+      const inp=document.getElementById('essai'),err=document.getElementById('merr'),v=parsePerf(inp.value);
+      if(v==null||Number.isNaN(v)){inp.classList.add('bad');err.textContent=v==null?'Saisis un résultat.':'Valeur illisible. Exemples : 8,45 · 4,20 · 1:05,3';inp.focus();return}
       const s=ensureSession(c);
-      const arr=el.res[ep.id]=el.res[ep.id]||[];const ex=arr.find(x=>x.s===s.id);
-      if(ex)ex.e=vals;else arr.push({s:s.id,e:vals});
-      saveC();const b=bestOf(ep,el.sexe,vals);ui.modal=null;render();toast('Enregistré : '+fmtPerf(b,ep.u)+' · '+fmtN(noteOf(ep,el.sexe,b))+'/12');break}
-    case 'entry-clear':{const m=ui.modal,el=c.eleves.find(x=>x.id===m.sid),s=openSess(c);if(s){el.res[m.epId]=entriesOf(el,m.epId).filter(x=>x.s!==s.id);cleanSessions(c);saveC()}ui.modal=null;render();toast('Saisie effacée');break}
+      const arr=el.res[ep.id]=el.res[ep.id]||[];let en=arr.find(x=>x.s===s.id);
+      if(!en){en={s:s.id,e:[]};arr.push(en)}
+      en.e.push(v);m.edit=null;saveC();render();focusModal();break}
+    case 'entry-edit':ui.modal.edit=+d.i;render();focusModal();break;
+    case 'entry-edit-cancel':ui.modal.edit=null;render();break;
+    case 'entry-edit-ok':{
+      const m=ui.modal,el=c.eleves.find(x=>x.id===m.sid),s=openSess(c);
+      const en=s?entriesOf(el,m.epId).find(x=>x.s===s.id):null;
+      const inp=document.getElementById('edit-val'),err=document.getElementById('merr');
+      if(!en||!inp)return;
+      const v=parsePerf(inp.value);
+      if(v==null||Number.isNaN(v)){inp.classList.add('bad');err.textContent=v==null?'Saisis un résultat, ou annule.':'Valeur illisible. Exemples : 8,45 · 4,20 · 1:05,3';inp.focus();return}
+      en.e[m.edit]=v;m.edit=null;saveC();render();toast('Résultat corrigé');break}
+    case 'entry-del':{
+      const m=ui.modal,el=c.eleves.find(x=>x.id===m.sid),s=openSess(c);
+      const en=s?entriesOf(el,m.epId).find(x=>x.s===s.id):null;
+      if(!en)return;
+      en.e.splice(+d.i,1);
+      if(!en.e.length){el.res[m.epId]=entriesOf(el,m.epId).filter(x=>x!==en);cleanSessions(c)}
+      m.edit=null;saveC();render();toast('Résultat supprimé');break}
     case 'entry-del-old':{const m=ui.modal,el=c.eleves.find(x=>x.id===m.sid);el.res[m.epId]=entriesOf(el,m.epId).filter(x=>x.s!==d.s);cleanSessions(c);saveC();render();break}
     case 'end-session':{const s=openSess(c);if(!s||!sessCount(c,s.id))return;s.closed=true;saveC();go('rank',{sessId:s.id,rankTab:'g',rankSex:'all'});toast('Séance enregistrée');break}
     case 'del-session':{const sid=ui.sessId;confirmBox('Supprimer la séance','Tous les résultats saisis pendant cette séance seront supprimés.','Supprimer la séance',()=>{c.eleves.forEach(el=>Object.keys(el.res).forEach(k=>{el.res[k]=el.res[k].filter(x=>x.s!==sid)}));c.seances=c.seances.filter(x=>x.id!==sid);saveC();ui.modal=null;go('class',{tab:'rank'})});break}
@@ -739,13 +770,15 @@ function chg(a,d,t){
       if(v==null){delete ep.cu[d.sx][d.i];t.classList.remove('custom');t.value=fmtIn(seuils(ep,d.sx)[+d.i],ep.u)}else{ep.cu[d.sx][d.i]=v;t.classList.add('custom')}saveS();break}
   }
 }
-function live(a){if(a==='entry'){[0,1,2].forEach(i=>document.getElementById('essai'+i).classList.remove('bad'));document.getElementById('merr').textContent='';livePreview()}}
+function live(a,t){if(a==='entry'){t.classList.remove('bad');const er=document.getElementById('merr');if(er)er.textContent=''}}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(t)act(t.dataset.act,t.dataset,t,e)});
 document.addEventListener('change',e=>{const t=e.target.closest('[data-chg]');if(t)chg(t.dataset.chg,t.dataset,t)});
-document.addEventListener('input',e=>{const t=e.target.closest('[data-live]');if(t)live(t.dataset.live)});
+document.addEventListener('input',e=>{const t=e.target.closest('[data-live]');if(t)live(t.dataset.live,t)});
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&ui.modal)closeModal();
-  if(e.key==='Enter'&&ui.modal){const t=e.target;if(t&&t.tagName==='INPUT'&&t.type==='text'){const b=$layer.querySelector('.btn.primary');if(b){e.preventDefault();b.click()}}}
+  if(e.key==='Enter'&&ui.modal){const t=e.target;
+    if(ui.modal.type==='entry'){if(t&&t.dataset&&t.dataset.enter){e.preventDefault();const b=$layer.querySelector('[data-act="'+t.dataset.enter+'"]');if(b)b.click()}return}
+    if(t&&t.tagName==='INPUT'&&t.type==='text'){const b=$layer.querySelector('.btn.primary');if(b){e.preventDefault();b.click()}}}
 });
 
 /* ---- fichiers : export CSV et sauvegarde ---- */
@@ -796,6 +829,7 @@ function makeDemo(){
     });
     c.eleves.push(el);
   });
+  assignCi(c);
   const id='class-'+uid();C[id]=c;mark(id);go('class',{classId:id,tab:'rank'});toast('Classe d’exemple créée');
 }
 
