@@ -216,6 +216,14 @@ tr:last-child td{border-bottom:0}
 .res .v{flex:1;min-width:0;font-family:var(--f-display);font-weight:700;font-size:26px;line-height:1.1}
 .res input{flex:1;min-width:0;min-height:44px;font-family:var(--f-display);font-size:22px;font-weight:600}
 .res .btn.small{padding:4px 10px;flex:none}
+
+/* pavé numérique */
+input[type=text].disp{font-family:var(--f-display);font-size:36px;font-weight:700;text-align:center;min-height:68px;caret-color:transparent}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.key{min-height:66px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface2);font-family:var(--f-display);font-size:32px;font-weight:700;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.key:active{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.key.colon{grid-column:1/-1;min-height:48px;font-size:18px;font-family:var(--f-body);font-weight:600}
+.btn.big{min-height:62px;font-size:20px}
 </style>
 
 <div id="app"></div>
@@ -385,17 +393,31 @@ function applyDocs(list,authoritative){
   }else if(!loaded&&S){loaded=true;changed=true}
   if(changed)softRender();
 }
-function initLocal(){
+const tmo=(p,ms)=>Promise.race([p,new Promise(r=>setTimeout(r,ms))]);
+let idbP=null;
+const getIdb=()=>idbP||(idbP=new Promise(res=>{try{if(!window.indexedDB)return res(null);const r=indexedDB.open('athle12',1);r.onupgradeneeded=()=>r.result.createObjectStore('docs');r.onsuccess=()=>res(r.result);r.onerror=()=>res(null);r.onblocked=()=>res(null)}catch(e){res(null)}}));
+async function idbPut(id,data){const db=await getIdb();if(!db)return;return new Promise(res=>{try{const t=db.transaction('docs','readwrite');t.objectStore('docs').put(data,id);t.oncomplete=t.onerror=t.onabort=()=>res()}catch(e){res()}})}
+async function idbDel(id){const db=await getIdb();if(!db)return;return new Promise(res=>{try{const t=db.transaction('docs','readwrite');t.objectStore('docs').delete(id);t.oncomplete=t.onerror=t.onabort=()=>res()}catch(e){res()}})}
+async function idbAll(){const db=await getIdb();if(!db)return [];return new Promise(res=>{try{const out=[],rq=db.transaction('docs','readonly').objectStore('docs').openCursor();rq.onsuccess=()=>{const c=rq.result;if(c){out.push([c.key,c.value]);c.continue()}else res(out)};rq.onerror=()=>res([])}catch(e){res([])}})}
+async function initLocal(){
   mode='local';
   const mem={};let ok=true;
-  try{localStorage.setItem('athle12:t','1');localStorage.removeItem('athle12:t')}catch(e){ok=false;noStore=true}
+  try{localStorage.setItem('athle12:t','1');localStorage.removeItem('athle12:t')}catch(e){ok=false}
+  const hasIdb=!!(await tmo(getIdb(),2500));
+  noStore=!ok&&!hasIdb;
   adapter={
-    write:async(id,data)=>{mem[id]=data;if(ok){try{localStorage.setItem('athle12:'+id,JSON.stringify(data))}catch(e){}}},
-    remove:async id=>{delete mem[id];if(ok){try{localStorage.removeItem('athle12:'+id)}catch(e){}}}
+    write:async(id,data)=>{mem[id]=data;if(ok){try{localStorage.setItem('athle12:'+id,JSON.stringify(data))}catch(e){}}await tmo(idbPut(id,data),3000)},
+    remove:async id=>{delete mem[id];if(ok){try{localStorage.removeItem('athle12:'+id)}catch(e){}}await tmo(idbDel(id),3000)}
   };
   const list=[];
   if(ok){try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf('athle12:')===0){const id=k.slice(8);try{list.push([id,JSON.parse(localStorage.getItem(k))])}catch(e){}}}}catch(e){}}
+  let rows=[];try{rows=(await tmo(idbAll(),2500))||[]}catch(e){}
+  const have=new Set(list.map(x=>x[0])),back=[];
+  rows.forEach(r=>{if(!have.has(r[0])){list.push(r);back.push(r[0])}});
   applyDocs(list,true);
+  back.forEach(id=>mark(id));
+  const inIdb=new Set(rows.map(r=>r[0]));
+  list.forEach(([id,d])=>{if(d&&!inIdb.has(id)&&back.indexOf(id)<0)idbPut(id,d)});
 }
 function initCloud(db,uidv){
   mode='cloud';
@@ -416,7 +438,7 @@ async function boot(){
   if(document.readyState==='complete')regSW();else window.addEventListener('load',regSW);
   let db=null,u=null,uidv=null;
   
-  if(db&&uidv)initCloud(db,uidv);else initLocal();
+  if(db&&uidv)initCloud(db,uidv);else initLocal().catch(()=>{if(!S)S=defaultS();loaded=true;render()});
 }
 
 /* ============ rendu ============ */
@@ -435,8 +457,9 @@ function render(){
 }
 function go(view,props){Object.assign(ui,{view},props||{});ui.modal=null;render();window.scrollTo(0,0)}
 function toast(t){$toast.innerHTML=`<div class="toast" role="status">${esc(t)}</div>`;clearTimeout(toast.t);toast.t=setTimeout(()=>{$toast.innerHTML=''},2400)}
+const iosTab=()=>{try{const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);return ios&&!(navigator.standalone===true||matchMedia('(display-mode: standalone)').matches)}catch(e){return false}};
 const statusPill=()=>`<span id="status" class="pill ok"></span>`;
-const topbar=(title,back,right)=>`<header class="topbar"><div class="wrap">${back?`<button class="iconbtn" data-act="${back}" aria-label="Retour">←</button>`:''}<h2>${esc(title)}</h2>${right||''}${statusPill()}</div></header>`;
+const topbar=(title,back,right)=>`<header class="topbar"><div class="wrap">${back?`<button class="iconbtn" data-act="${back}" aria-label="Retour">←</button>`:''}<h2>${esc(title)}</h2>${right||''}${statusPill()}</div>${noStore?'<div class="wrap"><div class="banner" style="margin-top:8px;background:var(--bad);color:#fff">Ce navigateur n’enregistre rien : les résultats seront perdus si tu actualises ou fermes la page. Ouvre l’appli dans Safari hors navigation privée et télécharge une sauvegarde.</div></div>':''}</header>`;
 
 /* ---- accueil ---- */
 function vHome(){
@@ -446,7 +469,7 @@ function vHome(){
   const ne=S.epreuves.length,nf=S.epreuves.filter(e=>e.fin).length;
   return `<div class="wrap">${topbar('Athlétisme',null,'')}
   <div class="page">
-   ${noStore?'<div class="banner">Le navigateur bloque l’enregistrement local : tes données seront perdues à la fermeture. Ouvre la page depuis GitHub Pages ou un autre navigateur, ou télécharge une sauvegarde.</div>':''}
+   ${iosTab()?'<div class="banner">Tu es dans Safari. L’icône de l’écran d’accueil a son propre espace de stockage : les résultats saisis ici n’y apparaissent pas. Utilise toujours le même des deux.</div>':''}
    <section class="hero"><p class="eyebrow">Évaluation sur 12 points</p><h1>Athlétisme</h1><p>Barèmes, saisie des performances pendant la séance et classements en fin de cours.</p></section>
    <section class="stack"><h2>Mes classes</h2>
     ${cl.length?'':`<div class="empty"><h3>Aucune classe pour l’instant</h3><p>Crée ta première classe, ou charge une classe d’exemple pour essayer l’appli.</p></div>`}
@@ -642,23 +665,36 @@ function vModal(){
     if(!el||!ep)return '';
     const s=openSess(c),cur=s?entriesOf(el,ep.id).find(e=>e.s===s.id):null;
     const list=cur?cur.e:[],sx=el.sexe;
+    const ed=m.edit!=null&&list[m.edit]!=null,action=ed?'entry-edit-ok':'entry-add';
     const past=entriesOf(el,ep.id).filter(e=>e!==cur).map(e=>({e,s:c.seances.find(x=>x.id===e.s)})).filter(x=>x.s).sort((a,b)=>b.s.ts-a.s.ts);
-    const rows=list.map((v,i)=>m.edit===i
-      ?`<div class="res"><span class="k">${i+1}</span><input type="text" id="edit-val" inputmode="decimal" autocomplete="off" value="${esc(fmtIn(v,ep.u))}" aria-label="Corriger le résultat ${i+1}" data-live="entry" data-enter="entry-edit-ok"><button class="btn small primary" data-act="entry-edit-ok">OK</button><button class="btn small" data-act="entry-edit-cancel">Annuler</button></div>`
-      :`<div class="res"><span class="k">${i+1}</span><span class="v num">${esc(fmtPerf(v,ep.u))}</span><button class="btn small" data-act="entry-edit" data-i="${i}" aria-label="Corriger le résultat ${i+1}">Corriger</button><button class="btn small danger" data-act="entry-del" data-i="${i}" aria-label="Supprimer le résultat ${i+1}">Supprimer</button></div>`).join('');
+    const rows=list.map((v,i)=>`<div class="res"><span class="k">${i+1}</span><span class="v num">${esc(fmtPerf(v,ep.u))}</span><button class="btn small" data-act="entry-edit" data-i="${i}" aria-label="Corriger le résultat ${i+1}">Corriger</button><button class="btn small danger" data-act="entry-del" data-i="${i}" aria-label="Supprimer le résultat ${i+1}">Supprimer</button></div>`).join('');
+    const keys=['1','2','3','4','5','6','7','8','9',',','0','back'].map(k=>`<button type="button" class="key" data-act="key" data-k="${k}" aria-label="${k==='back'?'Effacer':k}">${k==='back'?'⌫':k}</button>`).join('');
     inner=`<div><p class="eyebrow">${esc(ep.lib||'')}</p><h2>${esc(ep.nom)}</h2><p class="muted">${esc(fullName(el))}</p></div>
-    <div class="field"><label for="essai">Nouveau résultat${ep.u?' ('+esc(ep.u)+')':''}</label><div class="addrow"><input type="text" id="essai" inputmode="decimal" autocomplete="off" placeholder="${ep.u==='s'?'ex. 8,45':'ex. 4,20'}" data-live="entry" data-enter="entry-add"><button class="btn primary" data-act="entry-add">Ajouter</button></div></div>
+    <div class="field"><label for="essai">${ed?'Corriger le résultat '+(m.edit+1):'Nouveau résultat'}${ep.u?' ('+esc(ep.u)+')':''}</label><input type="text" id="essai" class="disp" readonly inputmode="none" value="${ed?esc(fmtIn(list[m.edit],ep.u)):''}" placeholder="${ep.u==='s'?'8,45':'4,20'}"></div>
     <p class="err" id="merr"></p>
-    <div><p class="lbl" style="margin-bottom:6px">Résultats de cette séance${list.length?' · '+list.length:''}</p>${list.length?`<div class="reslist">${rows}</div>`:'<p class="hint">Aucun résultat pour l’instant. Tu peux en ajouter autant que tu veux.</p>'}</div>
+    <div class="pad">${keys}${ep.u==='s'?'<button type="button" class="key colon" data-act="key" data-k=":">: minutes (ex. 1:05,3)</button>':''}</div>
+    <div class="row" style="flex-wrap:nowrap"><button class="btn primary big" data-act="${action}" style="flex:1">Valider</button>${ed?'<button class="btn big" data-act="entry-edit-cancel">Annuler</button>':''}</div>
+    ${list.length?`<div><p class="lbl" style="margin-bottom:6px">Résultats de cette séance · ${list.length}</p><div class="reslist">${rows}</div></div>`:''}
     ${past.length?`<div><p class="lbl" style="margin-bottom:6px">Séances précédentes</p><div class="hist">${past.map(({e,s:ss})=>{const p=bestOf(ep,sx,e.e);return `<div><span>${esc(fmtDate(ss.date))}</span><span class="num"><b>${esc(fmtPerf(p,ep.u))}</b>${e.e.length>1?' · '+e.e.length+' résultats':''}</span><button class="btn small ghost" data-act="entry-del-old" data-s="${esc(e.s)}" aria-label="Supprimer cette saisie">Retirer</button></div>`}).join('')}</div></div>`:''}
-    <div class="row" style="justify-content:flex-end"><button class="btn" data-act="close">Terminé</button></div>`;
+    <div class="row" style="justify-content:flex-end"><button class="btn" data-act="close">Fermer</button></div>`;
   }
   return `<div class="layer" data-act="backdrop"><div class="sheet" role="dialog" aria-modal="true">${inner}</div></div>`;
 }
 function openModal(m){ui.modal=m;render();focusModal()}
 function closeModal(){ui.modal=null;if(pendingRender){pendingRender=false}render()}
 function confirmBox(title,text,ok,fn){openModal({type:'confirm',title,text,ok,fn})}
-function focusModal(){const t=$layer.querySelector('#edit-val')||$layer.querySelector('#essai')||$layer.querySelector('input[type=text]');if(t){t.focus();if(t.id==='edit-val')t.select()}}
+function pressKey(k){
+  const inp=document.getElementById('essai');if(!inp)return;
+  let v=inp.value;
+  if(k==='back')v=v.slice(0,-1);
+  else if(v.length<8){
+    if(k===','){if(!/[,.]/.test(v))v+=(v===''||/:$/.test(v))?'0,':','}
+    else if(k===':'){if(v!==''&&!/[:,]/.test(v))v+=':'}
+    else v+=k;
+  }
+  inp.value=v;inp.classList.remove('bad');const er=document.getElementById('merr');if(er)er.textContent='';
+}
+function focusModal(){if(ui.modal&&ui.modal.type==='entry')return;const t=$layer.querySelector('#edit-val')||$layer.querySelector('#essai')||$layer.querySelector('input[type=text]');if(t){t.focus();if(t.id==='edit-val')t.select()}}
 
 /* ============ actions ============ */
 function curClass(){return C[ui.classId]}
@@ -717,23 +753,25 @@ function act(a,d,t,e){
     case 'del-class':confirmBox('Supprimer la classe','Tous les élèves et résultats de cette classe seront supprimés.','Supprimer la classe',()=>{const id=ui.classId;delete C[id];dirty.delete(id);adapter.remove(id).catch(()=>{});ui.modal=null;go('home')});break;
     case 'confirm-yes':{const f=ui.modal.fn;f();break}
     case 'entry':{const el=c.eleves.find(x=>x.id===ui.sid);openModal({type:'entry',sid:el.id,epId:d.ep});break}
+    case 'key':pressKey(d.k);break;
     case 'entry-add':{
       const m=ui.modal,el=c.eleves.find(x=>x.id===m.sid),ep=epById(m.epId);
       const inp=document.getElementById('essai'),err=document.getElementById('merr'),v=parsePerf(inp.value);
-      if(v==null||Number.isNaN(v)){inp.classList.add('bad');err.textContent=v==null?'Saisis un résultat.':'Valeur illisible. Exemples : 8,45 · 4,20 · 1:05,3';inp.focus();return}
+      if(v==null||Number.isNaN(v)){inp.classList.add('bad');err.textContent=v==null?'Entre un résultat avec le pavé.':'Valeur illisible. Exemples : 8,45 · 4,20 · 1:05,3';return}
       const s=ensureSession(c);
       const arr=el.res[ep.id]=el.res[ep.id]||[];let en=arr.find(x=>x.s===s.id);
       if(!en){en={s:s.id,e:[]};arr.push(en)}
-      en.e.push(v);m.edit=null;saveC();render();focusModal();break}
-    case 'entry-edit':ui.modal.edit=+d.i;render();focusModal();break;
+      en.e.push(v);saveC();
+      go('class',{tab:'eleves'});toast('Résultat enregistré');break}
+    case 'entry-edit':ui.modal.edit=+d.i;render();break;
     case 'entry-edit-cancel':ui.modal.edit=null;render();break;
     case 'entry-edit-ok':{
       const m=ui.modal,el=c.eleves.find(x=>x.id===m.sid),s=openSess(c);
       const en=s?entriesOf(el,m.epId).find(x=>x.s===s.id):null;
-      const inp=document.getElementById('edit-val'),err=document.getElementById('merr');
+      const inp=document.getElementById('essai'),err=document.getElementById('merr');
       if(!en||!inp)return;
       const v=parsePerf(inp.value);
-      if(v==null||Number.isNaN(v)){inp.classList.add('bad');err.textContent=v==null?'Saisis un résultat, ou annule.':'Valeur illisible. Exemples : 8,45 · 4,20 · 1:05,3';inp.focus();return}
+      if(v==null||Number.isNaN(v)){inp.classList.add('bad');err.textContent=v==null?'Entre un résultat, ou annule.':'Valeur illisible. Exemples : 8,45 · 4,20 · 1:05,3';return}
       en.e[m.edit]=v;m.edit=null;saveC();render();toast('Résultat corrigé');break}
     case 'entry-del':{
       const m=ui.modal,el=c.eleves.find(x=>x.id===m.sid),s=openSess(c);
@@ -775,6 +813,14 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
 document.addEventListener('change',e=>{const t=e.target.closest('[data-chg]');if(t)chg(t.dataset.chg,t.dataset,t)});
 document.addEventListener('input',e=>{const t=e.target.closest('[data-live]');if(t)live(t.dataset.live,t)});
 document.addEventListener('keydown',e=>{
+  if(ui.modal&&ui.modal.type==='entry'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+    const k=e.key,tg=e.target&&e.target.tagName;
+    if(/^[0-9]$/.test(k)){pressKey(k);e.preventDefault();return}
+    if(k===','||k==='.'){pressKey(',');e.preventDefault();return}
+    if(k===':'){pressKey(':');e.preventDefault();return}
+    if(k==='Backspace'){pressKey('back');e.preventDefault();return}
+    if(k==='Enter'&&tg!=='BUTTON'){const b=$layer.querySelector('[data-act="'+(ui.modal.edit!=null?'entry-edit-ok':'entry-add')+'"]');if(b){e.preventDefault();b.click()}return}
+  }
   if(e.key==='Escape'&&ui.modal)closeModal();
   if(e.key==='Enter'&&ui.modal){const t=e.target;
     if(ui.modal.type==='entry'){if(t&&t.dataset&&t.dataset.enter){e.preventDefault();const b=$layer.querySelector('[data-act="'+t.dataset.enter+'"]');if(b)b.click()}return}
