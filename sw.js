@@ -1,6 +1,6 @@
 /* Service worker : permet d'ouvrir l'appli sans connexion.
    Il ne touche jamais aux données des classes (stockées dans le navigateur). */
-const CACHE='athle12-v1';
+const CACHE='athle12-v2';
 const FILES=['./','index.html','manifest.json','apple-touch-icon.png','icon-192.png','icon-512.png'];
 
 self.addEventListener('install',e=>{
