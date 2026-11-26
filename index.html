@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>Athlétisme 12 points</title>
 <link rel="manifest" href="manifest.json">
@@ -32,6 +32,7 @@
   --accent:#FF7048; --on-accent:#1B0D07; --poly:#7FA6FF; --good:#4FD08C; --warn:#F0B34A; --bad:#FF8A7A;
   --gold:#E6B63A; --silver:#A9B4BD; --bronze:#CC8452; color-scheme:dark;}
 *{box-sizing:border-box}
+html,body,button,a,input,select,textarea,label,canvas,video,.tile,.key{touch-action:manipulation}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.4;
   padding-block:0 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:30}
@@ -263,6 +264,7 @@ input[type=text].disp{font-family:var(--f-display);font-size:36px;font-weight:70
 .cvset{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:5}
 .cvset[hidden]{display:none}
 .cvset .sheet{border-radius:18px}
+.cvclip{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.cvclip span{font-weight:600;min-width:130px}.cvclip small{flex:1;color:var(--muted)}
 </style>
 
 <div id="app"></div>
@@ -301,7 +303,7 @@ const parseNum=s=>{s=String(s==null?'':s).trim().replace(',','.');if(s==='')retu
 
 /* ============ barèmes par défaut (fichier Excel) ============ */
 const mk=(id,nom,lib,u,F,G)=>({id,nom,lib,u,F:{z:F[0],t:F[1]},G:{z:G[0],t:G[1]},cu:{F:{},G:{}},fin:true,min:null,max:null});
-const defaultS=()=>({v:1,arrondi:0,chrono:{lat:null,voix:true},coefs:{spe:50,poly:30,autres:20},epreuves:[
+const defaultS=()=>({v:1,arrondi:0,chrono:{lat:null,voix:true,signal:'partez',voiceName:''},coefs:{spe:50,poly:30,autres:20},epreuves:[
   mk('sprint','Sprint','60 m','s',[10.6,8.4],[9.5,7.4]),
   mk('haies','Haies','50 m haies','s',[12,9],[11,8]),
   mk('demi-fond','Demi-fond','200 m','s',[60,40],[56,36]),
@@ -315,7 +317,7 @@ function normS(s){
   const d=defaultS();s=s||{};
   s.coefs=Object.assign({},d.coefs,s.coefs||{});
   s.arrondi=s.arrondi||0;
-  s.chrono=Object.assign({lat:null,voix:true},s.chrono||{});
+  s.chrono=Object.assign({lat:null,voix:true,signal:'partez',voiceName:''},s.chrono||{});
   s.epreuves=Array.isArray(s.epreuves)?s.epreuves:d.epreuves;
   s.epreuves.forEach(e=>{e.cu=e.cu||{};e.cu.F=e.cu.F||{};e.cu.G=e.cu.G||{};if(e.fin==null)e.fin=true;if(e.min===undefined||e.min==='')e.min=null;if(e.max===undefined||e.max==='')e.max=null;e.lib=e.lib||'';e.u=e.u||''});
   return s;
@@ -440,6 +442,7 @@ const tmo=(p,ms)=>Promise.race([p,new Promise(r=>setTimeout(r,ms))]);
 let idbP=null;
 const getIdb=()=>idbP||(idbP=new Promise(res=>{try{if(!window.indexedDB)return res(null);const r=indexedDB.open('athle12',1);r.onupgradeneeded=()=>r.result.createObjectStore('docs');r.onsuccess=()=>res(r.result);r.onerror=()=>res(null);r.onblocked=()=>res(null)}catch(e){res(null)}}));
 async function idbPut(id,data){const db=await getIdb();if(!db)return;return new Promise(res=>{try{const t=db.transaction('docs','readwrite');t.objectStore('docs').put(data,id);t.oncomplete=t.onerror=t.onabort=()=>res()}catch(e){res()}})}
+async function idbGet(id){const db=await getIdb();if(!db)return null;return new Promise(res=>{try{const r=db.transaction('docs','readonly').objectStore('docs').get(id);r.onsuccess=()=>res(r.result||null);r.onerror=()=>res(null)}catch(e){res(null)}})}
 async function idbDel(id){const db=await getIdb();if(!db)return;return new Promise(res=>{try{const t=db.transaction('docs','readwrite');t.objectStore('docs').delete(id);t.oncomplete=t.onerror=t.onabort=()=>res()}catch(e){res()}})}
 async function idbAll(){const db=await getIdb();if(!db)return [];return new Promise(res=>{try{const out=[],rq=db.transaction('docs','readonly').objectStore('docs').openCursor();rq.onsuccess=()=>{const c=rq.result;if(c){out.push([c.key,c.value]);c.continue()}else res(out)};rq.onerror=()=>res([])}catch(e){res([])}})}
 async function initLocal(){
@@ -456,6 +459,7 @@ async function initLocal(){
   if(ok){try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf('athle12:')===0){const id=k.slice(8);try{list.push([id,JSON.parse(localStorage.getItem(k))])}catch(e){}}}}catch(e){}}
   let rows=[];try{rows=(await tmo(idbAll(),2500))||[]}catch(e){}
   const have=new Set(list.map(x=>x[0])),back=[];
+  rows=rows.filter(r=>String(r[0]).indexOf('voix:')!==0);
   rows.forEach(r=>{if(!have.has(r[0])){list.push(r);back.push(r[0])}});
   applyDocs(list,true);
   back.forEach(id=>mark(id));
@@ -948,22 +952,41 @@ const CV=(function(){
   let tStart=null,phase='',frames=[],recT0=0,recDur=0,drawing=false,ac=null,epId=null,taps=[],wake=null,curCs=NaN,curApprox=false,fps=30,timers=[],cancelled=false,seekCb=null,dragging=false;
   const OFF=3000;
   const timeEps=()=>S.epreuves.filter(e=>isTime(e,'F'));
-  const cfg=()=>S.chrono||(S.chrono={lat:null,voix:true});
+  const cfg=()=>S.chrono||(S.chrono={lat:null,voix:true,signal:'partez',voiceName:''});
   const lat=()=>{const v=cfg().lat;if(v!=null&&v!==''&&!isNaN(+v))return +v;return ac?(ac.outputLatency||ac.baseLatency||0):0};
   function fmtCs(cs){if(cs==null||isNaN(cs))return '–';const neg=cs<0;cs=Math.abs(cs);const s=Math.floor(cs/100),c=String(cs%100).padStart(2,'0');return (neg?'-':'')+(s>=60?Math.floor(s/60)+':'+String(s%60).padStart(2,'0')+','+c:s+','+c)}
   function later(f,ms){const t=setTimeout(f,ms);timers.push(t);return t}
   function clearTimers(){timers.forEach(clearTimeout);timers=[];try{speechSynthesis.cancel()}catch(e){}}
 
   /* ---- son ---- */
-  function audio(){if(!ac){const A=window.AudioContext||window.webkitAudioContext;if(!A)return null;ac=new A()}if(ac.state!=='running'){try{ac.resume()}catch(e){}}return ac}
-  function unlock(){const a=audio();if(!a)return;try{const b=a.createBuffer(1,1,22050),s=a.createBufferSource();s.buffer=b;s.connect(a.destination);s.start(0)}catch(e){}}
+  const CMDS=[['marques','À vos marques'],['prets','Prêts'],['partez','Partez']];
+  let clips={},clipBufs={},clipAc=null,bipEl=null;
+  function session(t){try{if(navigator.audioSession)navigator.audioSession.type=t}catch(e){}}
+  function audio(){if(!ac){const A=window.AudioContext||window.webkitAudioContext;if(!A)return null;session('playback');ac=new A()}if(ac.state!=='running'){try{ac.resume()}catch(e){}}return ac}
+  async function running(){const a=audio();if(a&&a.state!=='running'){try{await tmo(a.resume(),400)}catch(e){}}return a}
+  function wavBlob(sr,f32){const n=f32.length,b=new ArrayBuffer(44+n*2),v=new DataView(b);const w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+    w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
+    for(let i=0;i<n;i++)v.setInt16(44+i*2,Math.max(-1,Math.min(1,f32[i]))*32767,true);return new Blob([b],{type:'audio/wav'})}
+  function bipFallback(){if(bipEl)return bipEl;const sr=22050,n=Math.round(sr*.35),d=new Float32Array(n);for(let i=0;i<n;i++)d[i]=(Math.floor(i*1000*2/sr)%2?.8:-.8)*Math.min(1,(n-i)/400);bipEl=new Audio(URL.createObjectURL(wavBlob(sr,d)));bipEl.preload='auto';return bipEl}
+  function unlock(){
+    const a=audio();if(a){try{const b=a.createBuffer(1,1,22050),s=a.createBufferSource();s.buffer=b;s.connect(a.destination);s.start(0)}catch(e){}}
+    try{const el=bipFallback();el.muted=true;const p=el.play();if(p)p.then(()=>{el.pause();el.currentTime=0;el.muted=false}).catch(()=>{el.muted=false})}catch(e){}
+  }
   function beep(when,dur,freq,gain){const a=audio();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type='square';o.frequency.value=freq;g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(gain,when+.002);g.gain.setValueAtTime(gain,when+dur-.02);g.gain.linearRampToValueAtTime(0,when+dur);o.connect(g);g.connect(a.destination);o.start(when);o.stop(when+dur+.03)}
-  function say(txt){return new Promise(res=>{let done=false;const fin=()=>{if(!done){done=true;res()}};
+  async function loadClips(){clips={};for(const [k] of CMDS){try{const d=await tmo(idbGet('voix:'+k),1500);if(d&&d.pcm&&d.sr)clips[k]=d}catch(e){}}clipBufs={}}
+  function clipBuf(k){const a=audio();if(!a||!clips[k])return null;if(clipAc!==a){clipBufs={};clipAc=a}
+    if(!clipBufs[k]){const c=clips[k],b=a.createBuffer(1,c.pcm.length,c.sr),ch=b.getChannelData(0);for(let i=0;i<c.pcm.length;i++)ch[i]=c.pcm[i]/32767;clipBufs[k]=b}return clipBufs[k]}
+  function playClip(k,when){const a=audio(),b=clipBuf(k);if(!a||!b)return 0;const s=a.createBufferSource();s.buffer=b;s.connect(a.destination);s.start(when);return b.duration}
+  /* voix de synthèse : on choisit la plus naturelle installée sur l'iPad */
+  function voices(){try{return (speechSynthesis.getVoices()||[]).filter(v=>/^fr/i.test(v.lang))}catch(e){return []}}
+  function voiceScore(v){let s=0;const n=v.name||'';if(/fr[-_]FR/i.test(v.lang))s+=4;if(/premium/i.test(n))s+=6;if(/enhanced|amélioré|améliorée|siri/i.test(n))s+=4;if(/compact/i.test(n))s-=2;if(v.localService)s+=1;return s}
+  function bestVoice(){const L=voices();const want=cfg().voiceName;if(want){const v=L.find(x=>x.name===want);if(v)return v}return L.slice().sort((a,b)=>voiceScore(b)-voiceScore(a))[0]||null}
+  function speak(txt,fin){try{const u=new SpeechSynthesisUtterance(txt);u.lang='fr-FR';u.rate=.92;u.pitch=1;u.volume=1;const v=bestVoice();if(v){u.voice=v;u.lang=v.lang}u.onend=fin;u.onerror=fin;speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){fin&&fin()}}
+  function say(k,txt){return new Promise(res=>{let done=false;const fin=()=>{if(!done){done=true;res()}};
     try{
+      if(clips[k]){const a=audio();const d=playClip(k,a.currentTime+.03);later(fin,Math.round(d*1000)+150);return}
       if(!cfg().voix||!window.speechSynthesis||!window.SpeechSynthesisUtterance){const a=audio();if(a)beep(a.currentTime+.05,.12,600,.35);later(fin,700);return}
-      const u=new SpeechSynthesisUtterance(txt);u.lang='fr-FR';u.rate=1;u.volume=1;
-      const v=(speechSynthesis.getVoices()||[]).find(v=>/^fr/i.test(v.lang));if(v)u.voice=v;
-      u.onend=fin;u.onerror=fin;speechSynthesis.speak(u);later(fin,3500);
+      speak(txt,fin);later(fin,3500);
     }catch(e){fin()}})}
 
   /* ---- caméra et dessin ---- */
@@ -1047,14 +1070,24 @@ const CV=(function(){
     unlock();
     if(!startRec())return;
     st='rec';tStart=null;phase='À VOS MARQUES';cancelled=false;paint();
-    say('À vos marques').then(()=>later(()=>{if(st!=='rec')return;phase='PRÊTS';say('Prêts').then(()=>later(fire,1300+Math.random()*1000))},1800));
+    say('marques','À vos marques').then(()=>later(()=>{if(st!=='rec')return;phase='PRÊTS';paint();say('prets','Prêts').then(()=>later(fire,1300+Math.random()*1000))},1800));
   }
-  function fire(){
+  async function fire(){
     if(st!=='rec')return;
-    const a=audio();if(!a){tStart=performance.now();phase='';paint();return}
-    const t0=a.currentTime+.08,p0=performance.now()+(t0-a.currentTime)*1000;
-    beep(t0,.35,1000,.8);
-    tStart=p0+lat()*1000;phase='';later(paint,120);
+    const sig=cfg().signal||'partez';
+    const a=await running();
+    if(st!=='rec')return;
+    if(!a||a.state!=='running'){
+      // le son de l'iPad est bloqué pour Web Audio : bip de secours
+      const el=bipFallback();try{el.currentTime=0;el.play()}catch(e){}
+      tStart=performance.now()+lat()*1000;phase='PARTEZ';paint();later(()=>{phase='';},900);
+      if(sig==='partez'&&cfg().voix)later(()=>speak('Partez !'),380);
+      return;
+    }
+    const t0=a.currentTime+.1,p0=performance.now()+(t0-a.currentTime)*1000;
+    if(sig==='partez'&&clips.partez)playClip('partez',t0);
+    else{beep(t0,.35,1000,.9);if(sig==='partez'&&cfg().voix)later(()=>speak('Partez !'),480)}
+    tStart=p0+lat()*1000;phase='PARTEZ';later(paint,140);later(()=>{phase=''},1000);
   }
   function stop(){
     if(st!=='rec'||!rec)return;
@@ -1130,8 +1163,9 @@ const CV=(function(){
     if(st==='rec'){out.textContent='Arrête d’abord l’enregistrement.';return}
     const a=audio();if(!a){out.textContent='Son indisponible.';return}
     let mic;
+    session('play-and-record');
     try{mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})}
-    catch(e){out.textContent='Micro refusé : saisis la valeur à la main.';return}
+    catch(e){session('playback');out.textContent='Micro refusé : saisis la valeur à la main.';return}
     btn.disabled=true;out.textContent='Écoute… 5 bips';
     const src=a.createMediaStreamSource(mic),N=256,sp=a.createScriptProcessor(N,1,1),sr=a.sampleRate;
     const res=[];let arm=null;
@@ -1152,7 +1186,7 @@ const CV=(function(){
     }
     try{sp.disconnect();src.disconnect()}catch(e){}
     mic.getTracks().forEach(t=>t.stop());
-    try{ac.close()}catch(e){}ac=null;
+    try{ac.close()}catch(e){}ac=null;session('playback');
     btn.disabled=false;
     if(res.length<3){out.textContent='Mesure ratée (bips pas entendus). Rapproche l’enceinte du micro de l’iPad, monte le volume et recommence.';return}
     res.sort((x,y)=>x-y);const m=res[Math.floor(res.length/2)];
@@ -1170,7 +1204,14 @@ const CV=(function(){
     <div class="cvbar" id="cvbar"></div>
     <video id="cvcam" class="cvcam" playsinline muted autoplay></video>
     <div class="cvset" id="cvset" hidden><div class="sheet"><h2>Réglages du chrono</h2>
-      <label class="switch"><input type="checkbox" id="cv-voix">Annonce vocale « À vos marques… Prêts… »</label>
+      <label class="switch"><input type="checkbox" id="cv-voix">Annonce vocale « À vos marques… Prêts… Partez ! »</label>
+      <h3>Ta voix</h3>
+      <p class="hint">Le plus naturel : enregistre toi-même les trois commandes. Avec ton « Partez » enregistré, le chrono démarre exactement au début du mot.</p>
+      <div id="cv-clips" class="stack" style="gap:8px"></div><p id="cv-recmsg" class="hint"></p>
+      <div class="field"><label for="cv-vname">Voix de l’iPad (si pas d’enregistrement)</label><div class="row" style="flex-wrap:nowrap"><select id="cv-vname"></select><button class="btn" data-act="cv-test-voice">Tester</button></div></div>
+      <p class="hint">Pour une voix bien plus naturelle : Réglages de l’iPad › Accessibilité › Contenu énoncé › Voix › Français, puis télécharge une voix « Premium » ou « améliorée ». Elle apparaîtra ici.</p>
+      <div class="field"><label for="cv-sig">Signal de départ</label><select id="cv-sig"><option value="partez">« Partez ! » (ta voix, sinon bip puis voix de l’iPad)</option><option value="bip">Bip seul</option></select></div>
+      <h3>Enceinte</h3>
       <div class="field"><label for="cv-lat">Retard du son de l’enceinte (s)</label><input type="text" inputmode="decimal" id="cv-lat" placeholder="auto (haut-parleur de l’iPad)"></div>
       <p class="hint">Une enceinte Bluetooth joue le bip un peu après que l’iPad l’a envoyé, souvent 0,15 à 0,30 s. Le chrono est décalé de cette valeur pour partir au moment où les élèves entendent le bip. Pour la mesurer : enceinte connectée posée juste à côté de l’iPad, au calme, volume fort, puis « Mesurer ». À refaire si tu changes d’enceinte.</p>
       <div class="row"><button class="btn" data-act="cv-cal">Mesurer (5 bips)</button></div><p id="cv-calmsg" class="hint"></p>
@@ -1190,7 +1231,7 @@ const CV=(function(){
     root.querySelector('#cvep').disabled=st==='rec'||st==='wait';
     root.querySelector('#cvst').innerHTML=st==='rec'?'<span class="pill live">● Enregistrement</span>':st==='wait'?'Préparation de la vidéo…':'';
     const bar=root.querySelector('#cvbar');
-    if(st==='live')bar.innerHTML=`<button class="btn primary big cvmainbtn" data-act="cv-go">Départ</button><span class="cvhint">L’iPad annonce « À vos marques… Prêts… » puis le bip part. Le chrono démarre au bip.</span>`;
+    if(st==='live')bar.innerHTML=`<button class="btn primary big cvmainbtn" data-act="cv-go">Départ</button><span class="cvhint">L’iPad annonce « À vos marques… Prêts… Partez ! ». Le chrono démarre au signal de départ.</span>`;
     else if(st==='rec')bar.innerHTML=`<button class="btn big cvmainbtn cvstop" data-act="cv-stop">${tStart==null?'Annuler le départ':'■ Arrêter l’enregistrement'}</button><span class="cvhint">${tStart==null?'Départ en cours…':'Arrête quand le dernier élève a franchi la ligne.'}</span>`;
     else if(st==='wait')bar.innerHTML='<span class="cvhint">Préparation de la vidéo…</span>';
     else if(rv){bar.innerHTML=`<div class="cvtime" id="cvtime">–</div>
@@ -1219,7 +1260,8 @@ const CV=(function(){
     if(!epId||!eps.some(e=>e.id===epId))epId=(eps.find(e=>e.id==='sprint')||eps[0]).id;
     root.querySelector('#cvep').innerHTML=eps.map(e=>`<option value="${esc(e.id)}"${e.id===epId?' selected':''}>${esc(e.nom)}</option>`).join('');
     root.hidden=false;document.documentElement.style.overflow='hidden';
-    st='live';phase='';taps=[];note('');paint();
+    st='live';phase='';taps=[];note('');paint();loadClips();
+    try{speechSynthesis.getVoices();speechSynthesis.onvoiceschanged=()=>{if(!root.querySelector('#cvset').hidden)paintVoices()}}catch(e){}
     try{if(navigator.wakeLock)wake=await navigator.wakeLock.request('screen')}catch(e){}
     await openCam();
   }
@@ -1231,11 +1273,51 @@ const CV=(function(){
     try{if(wake)wake.release()}catch(e){}wake=null;
     render();
   }
-  function openSet(){const p=root.querySelector('#cvset');root.querySelector('#cv-voix').checked=!!cfg().voix;const l=cfg().lat;root.querySelector('#cv-lat').value=l==null?'':String(l).replace('.',',');root.querySelector('#cv-calmsg').textContent='';p.hidden=false}
+  function paintClips(){
+    const box=root&&root.querySelector('#cv-clips');if(!box)return;
+    box.innerHTML=CMDS.map(([k,l])=>`<div class="cvclip"><span>« ${l} »</span><small>${clips[k]?'ta voix':'voix de l’iPad'}</small><button class="btn small" data-act="cv-rec" data-k="${k}">● Enregistrer</button>${clips[k]?`<button class="btn small" data-act="cv-play-clip" data-k="${k}" aria-label="Écouter">▶</button><button class="btn small danger" data-act="cv-del-clip" data-k="${k}" aria-label="Supprimer">✕</button>`:''}</div>`).join('');
+  }
+  function paintVoices(){
+    const sel=root&&root.querySelector('#cv-vname');if(!sel)return;
+    const L=voices().slice().sort((a,b)=>voiceScore(b)-voiceScore(a)),want=cfg().voiceName;
+    sel.innerHTML=`<option value="">Automatique (la plus naturelle)</option>`+L.map(v=>`<option value="${esc(v.name)}"${v.name===want?' selected':''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('');
+  }
+  let recBusy=false;
+  async function recClip(k){
+    const out=root.querySelector('#cv-recmsg'),lab=(CMDS.find(x=>x[0]===k)||[])[1];
+    if(recBusy)return;if(st==='rec'){out.textContent='Arrête d’abord l’enregistrement vidéo.';return}
+    recBusy=true;session('play-and-record');
+    let mic;
+    try{mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})}
+    catch(e){session('playback');recBusy=false;out.textContent='Micro refusé : autorise le micro pour ce site.';return}
+    const a=audio();await running();
+    const src=a.createMediaStreamSource(mic),sp=a.createScriptProcessor(4096,1,1),buf=[];
+    sp.onaudioprocess=e=>buf.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    src.connect(sp);sp.connect(a.destination);
+    out.innerHTML=`<b style="color:var(--bad)">● Parle maintenant :</b> « ${lab} »`;
+    await new Promise(r=>setTimeout(r,2600));
+    try{sp.disconnect();src.disconnect()}catch(e){}
+    mic.getTracks().forEach(t=>t.stop());
+    const sr=a.sampleRate;try{ac.close()}catch(e){}ac=null;session('playback');recBusy=false;
+    let n=0;buf.forEach(b=>n+=b.length);const x=new Float32Array(n);let o=0;buf.forEach(b=>{x.set(b,o);o+=b.length});
+    let peak=0;for(let i=0;i<n;i++){const v=Math.abs(x[i]);if(v>peak)peak=v}
+    if(peak<.02){out.textContent='Je n’ai rien entendu. Parle plus fort, près de l’iPad, et recommence.';return}
+    let on=0;while(on<n&&Math.abs(x[on])<peak*.12)on++;
+    let end=n-1;while(end>on&&Math.abs(x[end])<peak*.04)end--;
+    const st0=Math.max(0,on-Math.round(.004*sr)),en=Math.min(n,end+Math.round(.12*sr));
+    const f=sr>=44100?2:1,m=Math.floor((en-st0)/f),pcm=new Int16Array(m),g=.95/peak;
+    for(let i=0;i<m;i++){let s=0;for(let j=0;j<f;j++)s+=x[st0+i*f+j];pcm[i]=Math.max(-32767,Math.min(32767,Math.round(s/f*g*32767)))}
+    const data={sr:Math.round(sr/f),pcm};
+    await idbPut('voix:'+k,data);clips[k]=data;clipBufs={};paintClips();
+    out.textContent='« '+lab+' » enregistré avec ta voix. Touche ▶ pour l’écouter.';
+  }
+  async function playOne(k){const a=await running();if(a)playClip(k,a.currentTime+.05)}
+  async function delClip(k){await idbDel('voix:'+k);delete clips[k];clipBufs={};paintClips()}
+  function openSet(){const p=root.querySelector('#cvset');root.querySelector('#cv-voix').checked=!!cfg().voix;const l=cfg().lat;root.querySelector('#cv-lat').value=l==null?'':String(l).replace('.',',');root.querySelector('#cv-sig').value=cfg().signal||'partez';root.querySelector('#cv-calmsg').textContent='';root.querySelector('#cv-recmsg').textContent='';paintVoices();paintClips();p.hidden=false}
   function closeSet(){
     const v=parseNum(root.querySelector('#cv-lat').value);
     if(v!=null&&(isNaN(v)||v<0||v>2)){root.querySelector('#cv-calmsg').textContent='Valeur entre 0 et 2 secondes, ou vide.';return}
-    cfg().voix=root.querySelector('#cv-voix').checked;cfg().lat=v;saveS();root.querySelector('#cvset').hidden=true;
+    cfg().voix=root.querySelector('#cv-voix').checked;cfg().lat=v;cfg().signal=root.querySelector('#cv-sig').value;cfg().voiceName=root.querySelector('#cv-vname').value;saveS();root.querySelector('#cvset').hidden=true;
   }
   function act(a,d){
     switch(a){
@@ -1253,6 +1335,10 @@ const CV=(function(){
       case 'cv-set':openSet();break;
       case 'cv-setok':closeSet();break;
       case 'cv-cal':calibrate();break;
+      case 'cv-rec':recClip(d.k);break;
+      case 'cv-play-clip':playOne(d.k);break;
+      case 'cv-del-clip':delClip(d.k);break;
+      case 'cv-test-voice':{const sel=root.querySelector('#cv-vname');const keep=cfg().voiceName;cfg().voiceName=sel.value;speak('À vos marques… Prêts… Partez !');cfg().voiceName=keep;break}
     }
   }
   function key(e){
