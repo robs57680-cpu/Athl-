@@ -226,6 +226,43 @@ input[type=text].disp{font-family:var(--f-display);font-size:36px;font-weight:70
 .key:active{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .key.colon{grid-column:1/-1;min-height:48px;font-size:18px;font-family:var(--f-body);font-weight:600}
 .btn.big{min-height:62px;font-size:20px}
+/* chrono vidéo */
+.cv{position:fixed;inset:0;z-index:50;background:#05090C;color:#EDF1F2;display:flex;flex-direction:column;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+.cv[hidden]{display:none}
+.cvtop{display:flex;align-items:center;gap:10px;padding:8px 12px;flex-wrap:wrap}
+.cvtitle{font-family:var(--f-display);font-size:22px;text-transform:uppercase;letter-spacing:.03em}
+.cvtop select{width:auto;min-width:140px;background:#17222A;color:#EDF1F2;border-color:#2C3C47}
+.cvst{flex:1;color:#93A2AB;font-size:14px}
+.cvtop .btn,.cvbar .btn,.cvside .btn{background:#17222A;color:#EDF1F2;border-color:#2C3C47}
+.cvtop .btn.primary,.cvbar .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.cvmain{flex:1;min-height:0;display:flex;gap:10px;padding:0 12px}
+.cvstage{flex:1;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;background:#000;border-radius:12px;overflow:hidden;position:relative}
+.cvstage canvas,.cvstage video{max-width:100%;max-height:100%;display:block}
+.cvnote{position:absolute;left:16px;right:16px;bottom:16px;background:#B42318;color:#fff;padding:12px 14px;border-radius:10px;font-weight:600}
+.cvside{width:290px;flex:none;overflow:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:6px}
+@media (orientation:portrait){.cvmain{flex-direction:column}.cvside{width:auto;max-height:36vh}}
+.cvlbl{font-size:13px;font-weight:600;color:#93A2AB;text-transform:uppercase;letter-spacing:.06em;margin:4px 0 2px}
+.cvstu{display:flex;align-items:center;gap:6px;text-align:left;background:#17222A;border:1.5px solid #2C3C47;color:#EDF1F2;border-radius:10px;padding:8px 10px;min-height:50px;flex:none}
+.cvstu .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cvstu small{margin-left:auto;color:#93A2AB;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cvstu:active:not(:disabled){background:var(--accent);border-color:var(--accent)}
+.cvstu:disabled{opacity:.55;cursor:default}
+.cvtap{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;background:color-mix(in srgb,var(--accent) 25%,#17222A)}
+.cvtap span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cvtap b{font-family:var(--f-display);font-size:22px}
+.cvbar{padding:10px 12px;display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap}
+.cvmainbtn{flex:0 1 360px}
+.cvstop{background:#B42318!important;border-color:#B42318!important;color:#fff!important}
+.cvhint{color:#93A2AB;font-size:14px;flex:1;min-width:200px}
+.cvtime{font-family:var(--f-display);font-weight:700;font-size:44px;line-height:1;min-width:170px;font-variant-numeric:tabular-nums}
+.cvtime i{font-style:normal;font-size:20px;color:#93A2AB}.cvtime small{font-size:20px;color:#F0B34A}
+.cvctl{display:flex;gap:8px;flex-wrap:wrap}
+.cvctl .btn{min-height:50px}
+#cvrange{flex:1 1 100%;accent-color:var(--accent);min-height:36px}
+.cvcam{position:absolute;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none}
+.cvset{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:5}
+.cvset[hidden]{display:none}
+.cvset .sheet{border-radius:18px}
 </style>
 
 <div id="app"></div>
@@ -264,7 +301,7 @@ const parseNum=s=>{s=String(s==null?'':s).trim().replace(',','.');if(s==='')retu
 
 /* ============ barèmes par défaut (fichier Excel) ============ */
 const mk=(id,nom,lib,u,F,G)=>({id,nom,lib,u,F:{z:F[0],t:F[1]},G:{z:G[0],t:G[1]},cu:{F:{},G:{}},fin:true,min:null,max:null});
-const defaultS=()=>({v:1,arrondi:0,coefs:{spe:50,poly:30,autres:20},epreuves:[
+const defaultS=()=>({v:1,arrondi:0,chrono:{lat:null,voix:true},coefs:{spe:50,poly:30,autres:20},epreuves:[
   mk('sprint','Sprint','60 m','s',[10.6,8.4],[9.5,7.4]),
   mk('haies','Haies','50 m haies','s',[12,9],[11,8]),
   mk('demi-fond','Demi-fond','200 m','s',[60,40],[56,36]),
@@ -278,6 +315,7 @@ function normS(s){
   const d=defaultS();s=s||{};
   s.coefs=Object.assign({},d.coefs,s.coefs||{});
   s.arrondi=s.arrondi||0;
+  s.chrono=Object.assign({lat:null,voix:true},s.chrono||{});
   s.epreuves=Array.isArray(s.epreuves)?s.epreuves:d.epreuves;
   s.epreuves.forEach(e=>{e.cu=e.cu||{};e.cu.F=e.cu.F||{};e.cu.G=e.cu.G||{};if(e.fin==null)e.fin=true;if(e.min===undefined||e.min==='')e.min=null;if(e.max===undefined||e.max==='')e.max=null;e.lib=e.lib||'';e.u=e.u||''});
   return s;
@@ -497,7 +535,7 @@ function vClass(){
   const last=c.seances.filter(x=>x.closed&&sessCount(c,x.id)>0).sort((a,b)=>b.ts-a.ts)[0];
   const tabs=[['eleves','Élèves'],['rank','Classements'],['notes','Notes'],['gerer','Gérer']].map(([k,l])=>`<button class="tab" role="tab" aria-selected="${ui.tab===k}" data-act="tab" data-t="${k}">${l}</button>`).join('');
   const bar=`<div class="sessionbar"><div>${n?`<span class="pill live">Séance en cours</span> <b>${esc(fmtDate(s.date))}</b> <span class="muted">· ${n} résultat${n>1?'s':''}</span>`:`<span class="muted">Aucune séance en cours. La première saisie en démarre une.</span>`}</div>
-    <span class="row">${!n&&last?`<button class="btn" data-act="resume-session" data-id="${esc(last.id)}">Reprendre la séance du ${esc(fmtDate(last.date))}</button>`:''}<button class="btn primary" data-act="end-session" ${n?'':'disabled'}>Terminer la séance</button></span></div>`;
+    <span class="row"><button class="btn" data-act="cv-open">Chrono vidéo</button>${!n&&last?`<button class="btn" data-act="resume-session" data-id="${esc(last.id)}">Reprendre la séance du ${esc(fmtDate(last.date))}</button>`:''}<button class="btn primary" data-act="end-session" ${n?'':'disabled'}>Terminer la séance</button></span></div>`;
   let body='';
   if(ui.tab==='eleves')body=tEleves(c,s);else if(ui.tab==='rank')body=tSessions(c);else if(ui.tab==='notes')body=tNotes(c);else body=tGerer(c);
   return `<div class="wrap">${topbar(c.nom,'home','')}<div class="page">${bar}<div class="tabs" role="tablist">${tabs}</div>${body}</div></div>`;
@@ -729,6 +767,7 @@ function parseList(txt){
   return out;
 }
 function act(a,d,t,e){
+  if(a.indexOf('cv-')===0){CV.act(a,d,t,e);return}
   const c=curClass();
   switch(a){
     case 'backdrop':if(e.target===t)closeModal();break;
@@ -836,6 +875,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
 document.addEventListener('change',e=>{const t=e.target.closest('[data-chg]');if(t)chg(t.dataset.chg,t.dataset,t)});
 document.addEventListener('input',e=>{const t=e.target.closest('[data-live]');if(t)live(t.dataset.live,t)});
 document.addEventListener('keydown',e=>{
+  if(CV.isOpen()){if(CV.key(e))return}
   if(ui.modal&&ui.modal.type==='entry'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
     const k=e.key,tg=e.target&&e.target.tagName;
     if(/^[0-9]$/.test(k)){pressKey(k);e.preventDefault();return}
@@ -901,6 +941,333 @@ function makeDemo(){
   assignCi(c);
   const id='class-'+uid();C[id]=c;mark(id);go('class',{classId:id,tab:'rank'});toast('Classe d’exemple créée');
 }
+
+/* ============ chrono vidéo ============ */
+const CV=(function(){
+  let root=null,st='off',cam=null,camV=null,cvs=null,cx=null,vid=null,rec=null,chunks=[],blob=null,blobUrl=null,mime='';
+  let tStart=null,phase='',frames=[],recT0=0,recDur=0,drawing=false,ac=null,epId=null,taps=[],wake=null,curCs=NaN,curApprox=false,fps=30,timers=[],cancelled=false,seekCb=null,dragging=false;
+  const OFF=3000;
+  const timeEps=()=>S.epreuves.filter(e=>isTime(e,'F'));
+  const cfg=()=>S.chrono||(S.chrono={lat:null,voix:true});
+  const lat=()=>{const v=cfg().lat;if(v!=null&&v!==''&&!isNaN(+v))return +v;return ac?(ac.outputLatency||ac.baseLatency||0):0};
+  function fmtCs(cs){if(cs==null||isNaN(cs))return '–';const neg=cs<0;cs=Math.abs(cs);const s=Math.floor(cs/100),c=String(cs%100).padStart(2,'0');return (neg?'-':'')+(s>=60?Math.floor(s/60)+':'+String(s%60).padStart(2,'0')+','+c:s+','+c)}
+  function later(f,ms){const t=setTimeout(f,ms);timers.push(t);return t}
+  function clearTimers(){timers.forEach(clearTimeout);timers=[];try{speechSynthesis.cancel()}catch(e){}}
+
+  /* ---- son ---- */
+  function audio(){if(!ac){const A=window.AudioContext||window.webkitAudioContext;if(!A)return null;ac=new A()}if(ac.state!=='running'){try{ac.resume()}catch(e){}}return ac}
+  function unlock(){const a=audio();if(!a)return;try{const b=a.createBuffer(1,1,22050),s=a.createBufferSource();s.buffer=b;s.connect(a.destination);s.start(0)}catch(e){}}
+  function beep(when,dur,freq,gain){const a=audio();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type='square';o.frequency.value=freq;g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(gain,when+.002);g.gain.setValueAtTime(gain,when+dur-.02);g.gain.linearRampToValueAtTime(0,when+dur);o.connect(g);g.connect(a.destination);o.start(when);o.stop(when+dur+.03)}
+  function say(txt){return new Promise(res=>{let done=false;const fin=()=>{if(!done){done=true;res()}};
+    try{
+      if(!cfg().voix||!window.speechSynthesis||!window.SpeechSynthesisUtterance){const a=audio();if(a)beep(a.currentTime+.05,.12,600,.35);later(fin,700);return}
+      const u=new SpeechSynthesisUtterance(txt);u.lang='fr-FR';u.rate=1;u.volume=1;
+      const v=(speechSynthesis.getVoices()||[]).find(v=>/^fr/i.test(v.lang));if(v)u.voice=v;
+      u.onend=fin;u.onerror=fin;speechSynthesis.speak(u);later(fin,3500);
+    }catch(e){fin()}})}
+
+  /* ---- caméra et dessin ---- */
+  async function openCam(){
+    if(cam)return true;
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){note('La caméra n’est pas accessible dans ce navigateur.');return false}
+    try{cam=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60}}})}
+    catch(e){note('Caméra refusée. Autorise la caméra pour ce site (Réglages de l’iPad > Safari > Appareil photo), puis rouvre le chrono.');return false}
+    camV.srcObject=cam;
+    await new Promise(r=>{if(camV.readyState>=1)r();else camV.onloadedmetadata=()=>r()});
+    try{await camV.play()}catch(e){}
+    loop();return true;
+  }
+  function stopCam(){if(cam){cam.getTracks().forEach(t=>t.stop());cam=null}camV.srcObject=null}
+  function loop(){
+    if(drawing)return;drawing=true;
+    const rv=!!camV.requestVideoFrameCallback;
+    const next=()=>{if(rv)camV.requestVideoFrameCallback(step);else requestAnimationFrame(()=>step())};
+    const step=(now,meta)=>{
+      if(!cam){drawing=false;return}
+      let ft=performance.now();
+      if(meta&&meta.captureTime&&Math.abs(meta.captureTime-ft)<400)ft=meta.captureTime;
+      if(st==='live'||st==='rec')draw(ft);
+      next();
+    };
+    next();
+  }
+  function rrect(x,y,w,h,r){cx.beginPath();cx.moveTo(x+r,y);cx.arcTo(x+w,y,x+w,y+h,r);cx.arcTo(x+w,y+h,x,y+h,r);cx.arcTo(x,y+h,x,y,r);cx.arcTo(x,y,x+w,y,r);cx.closePath()}
+  const geom=(W,H)=>{const B=Math.max(8,Math.round(W/90));return {B,x:2*B,y:H-4*B}};
+  function draw(ft){
+    const vw=camV.videoWidth,vh=camV.videoHeight;if(!vw)return;
+    if(st!=='rec'&&(cvs.width!==vw||cvs.height!==vh)){cvs.width=vw;cvs.height=vh}
+    const W=cvs.width,H=cvs.height;
+    cx.drawImage(camV,0,0,W,H);
+    let cs=null;
+    if(st==='rec'&&tStart!=null)cs=Math.ceil((ft-tStart)/10-1e-6);
+    // chrono
+    const f=Math.round(H*.12);
+    cx.font=`700 ${f}px "Helvetica Neue",Helvetica,Arial,sans-serif`;
+    const tpl=cs!=null&&cs>=6000?'0:00,00':'00,00';
+    const txt=cs==null||cs<0?'0,00':fmtCs(cs);
+    const pad=f*.3,bw=cx.measureText(tpl).width+pad*2,bh=f*1.25,bx=(W-bw)/2,by=f*.2;
+    cx.fillStyle=cs!=null&&cs>=0?'rgba(210,65,27,.93)':'rgba(0,0,0,.72)';rrect(bx,by,bw,bh,f*.2);cx.fill();
+    cx.fillStyle='#fff';cx.textAlign='right';cx.textBaseline='middle';cx.fillText(txt,bx+bw-pad,by+bh/2+f*.04);
+    if(phase){const g=Math.round(f*.42);cx.font=`700 ${g}px "Helvetica Neue",Helvetica,Arial,sans-serif`;cx.textAlign='center';
+      const lw=cx.measureText(phase).width+g*1.2,ly=by+bh+g*.4;cx.fillStyle='rgba(0,0,0,.75)';rrect((W-lw)/2,ly,lw,g*1.5,g*.3);cx.fill();cx.fillStyle='#FFD34D';cx.fillText(phase,W/2,ly+g*.78)}
+    if(st==='rec'){
+      // code-barres du temps : lu à la relecture pour connaître le temps exact de l'image
+      const enc=cs==null?0:Math.max(1,Math.min(65535,cs+OFF)),G=geom(W,H);
+      cx.fillStyle='#fff';cx.fillRect(G.x-G.B,G.y-G.B,18*G.B,4*G.B);
+      for(let i=0;i<16;i++){const b=(enc>>(15-i))&1;cx.fillStyle=b?'#000':'#fff';cx.fillRect(G.x+i*G.B,G.y,G.B,G.B);cx.fillStyle=b?'#fff':'#000';cx.fillRect(G.x+i*G.B,G.y+G.B,G.B,G.B)}
+      frames.push({vt:(ft-recT0)/1000,cs});
+    }
+  }
+  let dc=null;
+  function decode(){
+    const w=vid.videoWidth,h=vid.videoHeight;if(!w)return NaN;
+    if(!dc)dc=document.createElement('canvas');dc.width=w;dc.height=h;
+    const o=dc.getContext('2d',{willReadFrequently:true});o.drawImage(vid,0,0,w,h);
+    const G=geom(w,h),s=Math.max(2,Math.floor(G.B/3));
+    const lum=(x,y)=>{const d=o.getImageData(Math.round(x-s/2),Math.round(y-s/2),s,s).data;let t=0;for(let i=0;i<d.length;i+=4)t+=.299*d[i]+.587*d[i+1]+.114*d[i+2];return t/(d.length/4)};
+    let v=0;
+    for(let i=0;i<16;i++){const cxp=G.x+i*G.B+G.B/2,a=lum(cxp,G.y+G.B/2),b=lum(cxp,G.y+1.5*G.B);if(Math.abs(a-b)<40)return NaN;v=(v<<1)|(a<b?1:0)}
+    return v===0?null:v-OFF;
+  }
+
+  /* ---- course ---- */
+  function pickMime(){if(!window.MediaRecorder)return null;const L=['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm'];for(const m of L){try{if(MediaRecorder.isTypeSupported(m))return m}catch(e){}}return ''}
+  function startRec(){
+    const ms=pickMime();
+    if(ms===null||!cvs.captureStream){note('L’enregistrement vidéo n’est pas disponible dans ce navigateur.');return false}
+    const stream=cvs.captureStream();chunks=[];
+    try{rec=new MediaRecorder(stream,ms?{mimeType:ms,videoBitsPerSecond:8000000}:{videoBitsPerSecond:8000000})}catch(e){try{rec=new MediaRecorder(stream)}catch(e2){note('Impossible de démarrer l’enregistrement.');return false}}
+    mime=rec.mimeType||ms||'video/mp4';
+    rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+    rec.onstop=()=>{stream.getTracks().forEach(t=>t.stop());if(cancelled){cancelled=false;st='live';phase='';paint();return}blob=new Blob(chunks,{type:mime.split(';')[0]});review()};
+    frames=[];recT0=performance.now();rec.start(1000);return true;
+  }
+  function goRace(){
+    if(st!=='live'||!cam)return;
+    unlock();
+    if(!startRec())return;
+    st='rec';tStart=null;phase='À VOS MARQUES';cancelled=false;paint();
+    say('À vos marques').then(()=>later(()=>{if(st!=='rec')return;phase='PRÊTS';say('Prêts').then(()=>later(fire,1300+Math.random()*1000))},1800));
+  }
+  function fire(){
+    if(st!=='rec')return;
+    const a=audio();if(!a){tStart=performance.now();phase='';paint();return}
+    const t0=a.currentTime+.08,p0=performance.now()+(t0-a.currentTime)*1000;
+    beep(t0,.35,1000,.8);
+    tStart=p0+lat()*1000;phase='';later(paint,120);
+  }
+  function stop(){
+    if(st!=='rec'||!rec)return;
+    clearTimers();
+    if(tStart==null)cancelled=true;
+    recDur=(performance.now()-recT0)/1000;fps=Math.max(10,Math.min(120,frames.length/Math.max(.5,recDur)));
+    st='wait';phase='';paint();
+    try{rec.stop()}catch(e){st='live';paint()}
+  }
+
+  /* ---- relecture ---- */
+  const dur=()=>isFinite(vid.duration)&&vid.duration>0?vid.duration:recDur;
+  function review(){
+    st='review';taps=[];curCs=NaN;
+    if(blobUrl)URL.revokeObjectURL(blobUrl);blobUrl=URL.createObjectURL(blob);
+    vid.src=blobUrl;
+    vid.onloadeddata=()=>{vid.onloadeddata=null;const f=frames.find(x=>x.cs!=null&&x.cs>=0);seekTo(f?f.vt:0)};
+    try{vid.load()}catch(e){}
+    paint();
+  }
+  function seekTo(t,cb){seekCb=cb||null;vid.currentTime=Math.max(0,Math.min(dur()-.005,t))}
+  function readFrame(){
+    let cs=NaN,approx=false;
+    try{cs=decode()}catch(e){cs=NaN}
+    if(cs!==null&&isNaN(cs)&&frames.length){
+      const t=vid.currentTime;let b=frames[0];frames.forEach(f=>{if(Math.abs(f.vt-t)<Math.abs(b.vt-t))b=f});
+      cs=b.cs;approx=true;
+    }
+    curCs=cs;curApprox=approx;paintTime();
+  }
+  function stepF(n){
+    vid.pause();const prev=curCs;
+    const mv=(k,tries)=>seekTo(vid.currentTime+k/fps,()=>{if(tries>0&&curCs===prev&&curCs!=null&&!isNaN(curCs))mv(k>0?.6:-.6,tries-1)});
+    mv(n,2);
+  }
+  function paintTime(){
+    const el=root&&root.querySelector('#cvtime');if(!el)return;
+    el.innerHTML=curCs===null||(curCs!=null&&curCs<0)?'<span style="opacity:.7">Avant le départ</span>':isNaN(curCs)?'–':`${fmtCs(curCs)}<i> s</i>${curApprox?'<small> ≈</small>':''}`;
+    const r=root.querySelector('#cvrange');if(r&&!dragging&&dur())r.value=Math.round(vid.currentTime/dur()*1000);
+  }
+  function tap(id){
+    if(st!=='review')return;
+    if(!vid.paused){toast('Mets d’abord la vidéo en pause sur l’arrivée');return}
+    if(curCs==null||isNaN(curCs)||curCs<=0){toast('Pas de temps lisible sur cette image');return}
+    const c=curClass(),el=c.eleves.find(x=>x.id===id),ep=epById(epId);if(!el||!ep)return;
+    const v=curCs/100;
+    if(outOfRange(ep,v)&&!confirm(fmtPerf(v,ep.u)+' est en dehors des limites de saisie de l’épreuve. Enregistrer quand même ?'))return;
+    const s=ensureSession(c);const arr=el.res[ep.id]=el.res[ep.id]||[];let en=arr.find(x=>x.s===s.id);if(!en){en={s:s.id,e:[]};arr.push(en)}
+    en.e.push(v);saveC();taps.push({id,v,ep:ep.id});paintSide();toast(el.prenom+' : '+fmtPerf(v,ep.u));
+  }
+  function undo(i){
+    const t=taps[i];if(!t)return;const c=curClass(),el=c.eleves.find(x=>x.id===t.id),s=openSess(c);
+    if(el&&s){const en=entriesOf(el,t.ep).find(x=>x.s===s.id);if(en){const k=en.e.lastIndexOf(t.v);if(k>=0)en.e.splice(k,1);if(!en.e.length){el.res[t.ep]=entriesOf(el,t.ep).filter(x=>x!==en);cleanSessions(c)}saveC()}}
+    taps.splice(i,1);paintSide();toast('Temps retiré');
+  }
+  async function savePhotos(){
+    if(!blob)return;
+    const type=mime.split(';')[0]||'video/mp4',ext=/mp4/.test(type)?'mp4':/quicktime/.test(type)?'mov':'webm';
+    const f=new File([blob],'course-'+toISO(new Date())+'-'+String(Date.now()).slice(-5)+'.'+ext,{type});
+    try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}}catch(e){if(e&&e.name==='AbortError')return}
+    const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+  }
+  function again(){
+    st='live';blob=null;taps=[];curCs=NaN;frames=[];
+    try{vid.pause()}catch(e){}vid.removeAttribute('src');try{vid.load()}catch(e){}
+    if(blobUrl){URL.revokeObjectURL(blobUrl);blobUrl=null}
+    paint();
+  }
+
+  /* ---- mesure du retard de l'enceinte ---- */
+  async function calibrate(){
+    const out=root.querySelector('#cv-calmsg'),btn=root.querySelector('[data-act="cv-cal"]');
+    if(st==='rec'){out.textContent='Arrête d’abord l’enregistrement.';return}
+    const a=audio();if(!a){out.textContent='Son indisponible.';return}
+    let mic;
+    try{mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})}
+    catch(e){out.textContent='Micro refusé : saisis la valeur à la main.';return}
+    btn.disabled=true;out.textContent='Écoute… 5 bips';
+    const src=a.createMediaStreamSource(mic),N=256,sp=a.createScriptProcessor(N,1,1),sr=a.sampleRate;
+    const res=[];let arm=null;
+    sp.onaudioprocess=e=>{
+      if(!arm)return;const d=e.inputBuffer.getChannelData(0),t0=e.playbackTime-N/sr;
+      for(let i=0;i<d.length;i++){const t=t0+i/sr,x=Math.abs(d[i]);
+        if(t<arm.t-.02){if(x>arm.noise)arm.noise=x;continue}
+        if(t>arm.t+1){arm.done(null);return}
+        if(x>Math.max(.05,arm.noise*4)){arm.done(t-arm.t);return}
+      }
+    };
+    src.connect(sp);sp.connect(a.destination);
+    for(let k=0;k<5;k++){
+      const r=await new Promise(done=>{const t=a.currentTime+.6;arm={t,noise:0,done:v=>{arm=null;done(v)}};beep(t,.15,1000,.8);setTimeout(()=>{if(arm){arm=null;done(null)}},2500)});
+      if(r!=null&&r>=0&&r<1)res.push(r);
+      out.textContent='Écoute… '+(k+1)+'/5';
+      await new Promise(r=>setTimeout(r,500));
+    }
+    try{sp.disconnect();src.disconnect()}catch(e){}
+    mic.getTracks().forEach(t=>t.stop());
+    try{ac.close()}catch(e){}ac=null;
+    btn.disabled=false;
+    if(res.length<3){out.textContent='Mesure ratée (bips pas entendus). Rapproche l’enceinte du micro de l’iPad, monte le volume et recommence.';return}
+    res.sort((x,y)=>x-y);const m=res[Math.floor(res.length/2)];
+    cfg().lat=Math.round(m*1000)/1000;saveS();
+    root.querySelector('#cv-lat').value=String(cfg().lat).replace('.',',');
+    out.textContent='Retard mesuré : '+fmtN(m,3)+' s (enregistré).';
+  }
+
+  /* ---- interface ---- */
+  function note(t){const el=root&&root.querySelector('#cvnote');if(el){el.textContent=t;el.hidden=!t}}
+  function build(){
+    root=document.createElement('div');root.className='cv';root.hidden=true;
+    root.innerHTML=`<div class="cvtop"><button class="btn" data-act="cv-close">← Fermer</button><b class="cvtitle">Chrono vidéo</b><select id="cvep" aria-label="Épreuve"></select><span id="cvst" class="cvst"></span><button class="btn" data-act="cv-set" aria-label="Réglages">Réglages</button></div>
+    <div class="cvmain"><div class="cvstage"><canvas id="cvc"></canvas><video id="cvv" playsinline muted preload="auto"></video><p id="cvnote" class="cvnote" hidden></p></div><aside class="cvside" id="cvside"></aside></div>
+    <div class="cvbar" id="cvbar"></div>
+    <video id="cvcam" class="cvcam" playsinline muted autoplay></video>
+    <div class="cvset" id="cvset" hidden><div class="sheet"><h2>Réglages du chrono</h2>
+      <label class="switch"><input type="checkbox" id="cv-voix">Annonce vocale « À vos marques… Prêts… »</label>
+      <div class="field"><label for="cv-lat">Retard du son de l’enceinte (s)</label><input type="text" inputmode="decimal" id="cv-lat" placeholder="auto (haut-parleur de l’iPad)"></div>
+      <p class="hint">Une enceinte Bluetooth joue le bip un peu après que l’iPad l’a envoyé, souvent 0,15 à 0,30 s. Le chrono est décalé de cette valeur pour partir au moment où les élèves entendent le bip. Pour la mesurer : enceinte connectée posée juste à côté de l’iPad, au calme, volume fort, puis « Mesurer ». À refaire si tu changes d’enceinte.</p>
+      <div class="row"><button class="btn" data-act="cv-cal">Mesurer (5 bips)</button></div><p id="cv-calmsg" class="hint"></p>
+      <div class="row" style="justify-content:flex-end"><button class="btn primary" data-act="cv-setok">OK</button></div></div></div>`;
+    document.body.appendChild(root);
+    cvs=root.querySelector('#cvc');cx=cvs.getContext('2d');vid=root.querySelector('#cvv');camV=root.querySelector('#cvcam');
+    vid.addEventListener('seeked',()=>requestAnimationFrame(()=>requestAnimationFrame(()=>{readFrame();const f=seekCb;seekCb=null;if(f)f()})));
+    vid.addEventListener('pause',()=>{readFrame();const b=root.querySelector('#cvplay');if(b)b.textContent='▶ Lecture'});
+    vid.addEventListener('play',()=>{const b=root.querySelector('#cvplay');if(b)b.textContent='❚❚ Pause'});
+    vid.addEventListener('timeupdate',()=>{if(!vid.paused)paintTime()});
+    root.querySelector('#cvep').addEventListener('change',e=>{epId=e.target.value;paintSide()});
+  }
+  function paint(){
+    if(!root)return;
+    const rv=st==='review';
+    cvs.style.display=rv?'none':'block';vid.style.display=rv?'block':'none';
+    root.querySelector('#cvep').disabled=st==='rec'||st==='wait';
+    root.querySelector('#cvst').innerHTML=st==='rec'?'<span class="pill live">● Enregistrement</span>':st==='wait'?'Préparation de la vidéo…':'';
+    const bar=root.querySelector('#cvbar');
+    if(st==='live')bar.innerHTML=`<button class="btn primary big cvmainbtn" data-act="cv-go">Départ</button><span class="cvhint">L’iPad annonce « À vos marques… Prêts… » puis le bip part. Le chrono démarre au bip.</span>`;
+    else if(st==='rec')bar.innerHTML=`<button class="btn big cvmainbtn cvstop" data-act="cv-stop">${tStart==null?'Annuler le départ':'■ Arrêter l’enregistrement'}</button><span class="cvhint">${tStart==null?'Départ en cours…':'Arrête quand le dernier élève a franchi la ligne.'}</span>`;
+    else if(st==='wait')bar.innerHTML='<span class="cvhint">Préparation de la vidéo…</span>';
+    else if(rv){bar.innerHTML=`<div class="cvtime" id="cvtime">–</div>
+      <div class="cvctl"><button class="btn" data-act="cv-step" data-n="-10">−10</button><button class="btn" data-act="cv-step" data-n="-1">◀ 1 image</button><button class="btn" data-act="cv-play" id="cvplay">▶ Lecture</button><button class="btn" data-act="cv-slow">Ralenti</button><button class="btn" data-act="cv-step" data-n="1">1 image ▶</button><button class="btn" data-act="cv-step" data-n="10">+10</button></div>
+      <input type="range" id="cvrange" min="0" max="1000" step="1" value="0" aria-label="Position dans la vidéo">
+      <div class="cvctl"><button class="btn" data-act="cv-save">Enregistrer dans Photos</button><button class="btn primary" data-act="cv-again">Nouvelle course</button></div>`;
+      const r=bar.querySelector('#cvrange');
+      r.addEventListener('input',()=>{dragging=true;vid.pause();seekTo(r.value/1000*dur())});
+      r.addEventListener('change',()=>{dragging=false});
+      paintTime();
+    }
+    paintSide();
+  }
+  function paintSide(){
+    const side=root.querySelector('#cvside'),c=curClass();if(!c){side.innerHTML='';return}
+    const ep=epById(epId),s=openSess(c);if(!ep){side.innerHTML='';return}
+    const rv=st==='review';
+    const tp=taps.length?`<p class="cvlbl">Cette course</p>`+taps.map((t,i)=>{const el=c.eleves.find(x=>x.id===t.id);return `<div class="cvtap"><span>${esc(el?el.prenom+' '+el.nom.toUpperCase():'?')}</span><b>${esc(fmtCs(Math.round(t.v*100)))}</b><button class="btn small" data-act="cv-undo" data-i="${i}">Retirer</button></div>`}).join(''):'';
+    const rows=sortEleves(c).map(el=>{const en=s?entriesOf(el,ep.id).find(e=>e.s===s.id):null;const vals=en?en.e.map(v=>fmtPerf(v,ep.u)).join(' · '):'';
+      return `<button class="cvstu" data-act="cv-tap" data-id="${el.id}" ${rv?'':'disabled'}><span class="dot" style="--sc:${stuCol(el)}"></span><span class="nm"><b>${esc(el.prenom)}</b> ${esc(el.nom.toUpperCase())}</span><small>${esc(vals)}</small></button>`}).join('');
+    side.innerHTML=`<p class="cvlbl">${rv?'Pause sur l’arrivée d’un élève, puis touche son nom':'Élèves · '+esc(ep.nom)}</p>`+tp+(rows||'<p class="cvhint">Aucun élève dans la classe.</p>');
+  }
+  async function open(){
+    const eps=timeEps();if(!eps.length){toast('Aucune épreuve chronométrée dans les barèmes');return}
+    if(!root)build();
+    if(!epId||!eps.some(e=>e.id===epId))epId=(eps.find(e=>e.id==='sprint')||eps[0]).id;
+    root.querySelector('#cvep').innerHTML=eps.map(e=>`<option value="${esc(e.id)}"${e.id===epId?' selected':''}>${esc(e.nom)}</option>`).join('');
+    root.hidden=false;document.documentElement.style.overflow='hidden';
+    st='live';phase='';taps=[];note('');paint();
+    try{if(navigator.wakeLock)wake=await navigator.wakeLock.request('screen')}catch(e){}
+    await openCam();
+  }
+  function close(){
+    if(st==='rec'&&!confirm('Arrêter l’enregistrement et fermer ?'))return;
+    clearTimers();
+    if(rec&&rec.state==='recording'){cancelled=true;try{rec.stop()}catch(e){}}
+    stopCam();again();st='off';root.hidden=true;document.documentElement.style.overflow='';
+    try{if(wake)wake.release()}catch(e){}wake=null;
+    render();
+  }
+  function openSet(){const p=root.querySelector('#cvset');root.querySelector('#cv-voix').checked=!!cfg().voix;const l=cfg().lat;root.querySelector('#cv-lat').value=l==null?'':String(l).replace('.',',');root.querySelector('#cv-calmsg').textContent='';p.hidden=false}
+  function closeSet(){
+    const v=parseNum(root.querySelector('#cv-lat').value);
+    if(v!=null&&(isNaN(v)||v<0||v>2)){root.querySelector('#cv-calmsg').textContent='Valeur entre 0 et 2 secondes, ou vide.';return}
+    cfg().voix=root.querySelector('#cv-voix').checked;cfg().lat=v;saveS();root.querySelector('#cvset').hidden=true;
+  }
+  function act(a,d){
+    switch(a){
+      case 'cv-open':open();break;
+      case 'cv-close':close();break;
+      case 'cv-go':goRace();break;
+      case 'cv-stop':stop();break;
+      case 'cv-step':stepF(+d.n);break;
+      case 'cv-play':vid.playbackRate=1;if(vid.paused)vid.play().catch(()=>{});else vid.pause();break;
+      case 'cv-slow':vid.playbackRate=.25;vid.play().catch(()=>{});break;
+      case 'cv-tap':tap(d.id);break;
+      case 'cv-undo':undo(+d.i);break;
+      case 'cv-save':savePhotos();break;
+      case 'cv-again':again();break;
+      case 'cv-set':openSet();break;
+      case 'cv-setok':closeSet();break;
+      case 'cv-cal':calibrate();break;
+    }
+  }
+  function key(e){
+    if(!root||root.hidden)return false;
+    if(!root.querySelector('#cvset').hidden)return e.key!=='Enter'?false:true;
+    if(st==='review'){
+      if(e.key==='ArrowRight'){stepF(e.shiftKey?10:1);e.preventDefault();return true}
+      if(e.key==='ArrowLeft'){stepF(e.shiftKey?-10:-1);e.preventDefault();return true}
+      if(e.key===' '){act('cv-play',{});e.preventDefault();return true}
+    }
+    if(e.key==='Escape'){close();return true}
+    return true;
+  }
+  return {act,key,isOpen:()=>!!root&&!root.hidden};
+})();
 
 boot();
 })();
