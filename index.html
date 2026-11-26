@@ -264,6 +264,7 @@ input[type=text].disp{font-family:var(--f-display);font-size:36px;font-weight:70
 .cvset{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:5}
 .cvset[hidden]{display:none}
 .cvset .sheet{border-radius:18px}
+.cvoffrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.cvoffv{min-width:96px;text-align:center}.cvoffv small{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}.cvoffv b,.cvtestclock{font-family:var(--f-display);font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}.cvtestclock{font-size:44px;margin-left:10px;color:var(--accent)}
 .cvclip{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.cvclip span{font-weight:600;min-width:130px}.cvclip small{flex:1;color:var(--muted)}
 </style>
 
@@ -953,7 +954,7 @@ const CV=(function(){
   const OFF=3000;
   const timeEps=()=>S.epreuves.filter(e=>isTime(e,'F'));
   const cfg=()=>S.chrono||(S.chrono={lat:null,voix:true,signal:'partez',voiceName:''});
-  const lat=()=>{const v=cfg().lat;if(v!=null&&v!==''&&!isNaN(+v))return +v;return ac?(ac.outputLatency||ac.baseLatency||0):0};
+  const lat=()=>{const v=cfg().lat;return (v!=null&&v!==''&&!isNaN(+v))?+v:0};
   function fmtCs(cs){if(cs==null||isNaN(cs))return '–';const neg=cs<0;cs=Math.abs(cs);const s=Math.floor(cs/100),c=String(cs%100).padStart(2,'0');return (neg?'-':'')+(s>=60?Math.floor(s/60)+':'+String(s%60).padStart(2,'0')+','+c:s+','+c)}
   function later(f,ms){const t=setTimeout(f,ms);timers.push(t);return t}
   function clearTimers(){timers.forEach(clearTimeout);timers=[];try{speechSynthesis.cancel()}catch(e){}}
@@ -970,6 +971,7 @@ const CV=(function(){
   function bipFallback(){if(bipEl)return bipEl;const sr=22050,n=Math.round(sr*.35),d=new Float32Array(n);for(let i=0;i<n;i++)d[i]=(Math.floor(i*1000*2/sr)%2?.8:-.8)*Math.min(1,(n-i)/400);bipEl=new Audio(URL.createObjectURL(wavBlob(sr,d)));bipEl.preload='auto';return bipEl}
   function unlock(){
     const a=audio();if(a){try{const b=a.createBuffer(1,1,22050),s=a.createBufferSource();s.buffer=b;s.connect(a.destination);s.start(0)}catch(e){}}
+    try{if(window.speechSynthesis&&window.SpeechSynthesisUtterance){const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}}catch(e){}
     try{const el=bipFallback();el.muted=true;const p=el.play();if(p)p.then(()=>{el.pause();el.currentTime=0;el.muted=false}).catch(()=>{el.muted=false})}catch(e){}
   }
   function beep(when,dur,freq,gain){const a=audio();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type='square';o.frequency.value=freq;g.gain.setValueAtTime(0,when);g.gain.linearRampToValueAtTime(gain,when+.002);g.gain.setValueAtTime(gain,when+dur-.02);g.gain.linearRampToValueAtTime(0,when+dur);o.connect(g);g.connect(a.destination);o.start(when);o.stop(when+dur+.03)}
@@ -990,7 +992,9 @@ const CV=(function(){
     }catch(e){fin()}})}
 
   /* ---- caméra et dessin ---- */
-  async function openCam(){
+  let camP=null;
+  function openCam(){if(cam)return Promise.resolve(true);if(!camP)camP=openCam2().finally(()=>{camP=null});return camP}
+  async function openCam2(){
     if(cam)return true;
     if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){note('La caméra n’est pas accessible dans ce navigateur.');return false}
     try{cam=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60}}})}
@@ -1023,7 +1027,16 @@ const CV=(function(){
     cx.drawImage(camV,0,0,W,H);
     let cs=null;
     if(st==='rec'&&tStart!=null)cs=Math.ceil((ft-tStart)/10-1e-6);
-    // chrono
+    overlay(cs,W,H);
+    if(st==='rec'&&rec){
+      // code-barres du temps : lu à la relecture pour connaître le temps exact de l'image
+      const enc=cs==null?0:Math.max(1,Math.min(65535,cs+OFF)),G=geom(W,H);
+      cx.fillStyle='#fff';cx.fillRect(G.x-G.B,G.y-G.B,18*G.B,4*G.B);
+      for(let i=0;i<16;i++){const b=(enc>>(15-i))&1;cx.fillStyle=b?'#000':'#fff';cx.fillRect(G.x+i*G.B,G.y,G.B,G.B);cx.fillStyle=b?'#fff':'#000';cx.fillRect(G.x+i*G.B,G.y+G.B,G.B,G.B)}
+      frames.push({vt:(ft-recT0)/1000,cs});
+    }
+  }
+  function overlay(cs,W,H){
     const f=Math.round(H*.12);
     cx.font=`700 ${f}px "Helvetica Neue",Helvetica,Arial,sans-serif`;
     const tpl=cs!=null&&cs>=6000?'0:00,00':'00,00';
@@ -1033,13 +1046,6 @@ const CV=(function(){
     cx.fillStyle='#fff';cx.textAlign='right';cx.textBaseline='middle';cx.fillText(txt,bx+bw-pad,by+bh/2+f*.04);
     if(phase){const g=Math.round(f*.42);cx.font=`700 ${g}px "Helvetica Neue",Helvetica,Arial,sans-serif`;cx.textAlign='center';
       const lw=cx.measureText(phase).width+g*1.2,ly=by+bh+g*.4;cx.fillStyle='rgba(0,0,0,.75)';rrect((W-lw)/2,ly,lw,g*1.5,g*.3);cx.fill();cx.fillStyle='#FFD34D';cx.fillText(phase,W/2,ly+g*.78)}
-    if(st==='rec'){
-      // code-barres du temps : lu à la relecture pour connaître le temps exact de l'image
-      const enc=cs==null?0:Math.max(1,Math.min(65535,cs+OFF)),G=geom(W,H);
-      cx.fillStyle='#fff';cx.fillRect(G.x-G.B,G.y-G.B,18*G.B,4*G.B);
-      for(let i=0;i<16;i++){const b=(enc>>(15-i))&1;cx.fillStyle=b?'#000':'#fff';cx.fillRect(G.x+i*G.B,G.y,G.B,G.B);cx.fillStyle=b?'#fff':'#000';cx.fillRect(G.x+i*G.B,G.y+G.B,G.B,G.B)}
-      frames.push({vt:(ft-recT0)/1000,cs});
-    }
   }
   let dc=null;
   function decode(){
@@ -1065,33 +1071,56 @@ const CV=(function(){
     rec.onstop=()=>{stream.getTracks().forEach(t=>t.stop());if(cancelled){cancelled=false;st='live';phase='';paint();return}blob=new Blob(chunks,{type:mime.split(';')[0]});review()};
     frames=[];recT0=performance.now();rec.start(1000);return true;
   }
+  /* Sur iPad, tant que la caméra filme, iOS envoie le son sur le haut-parleur de la tablette.
+     On coupe donc la caméra pendant l'annonce (le son part sur l'enceinte), puis on la relance juste après le signal :
+     l'enregistrement commence environ 1 s après le départ, bien avant l'arrivée. */
+  function standby(){
+    if(st!=='rec'||cam)return;
+    const W=cvs.width||1280,H=cvs.height||720;if(!cvs.width){cvs.width=W;cvs.height=H}
+    cx.fillStyle='#0B1217';cx.fillRect(0,0,W,H);
+    const g=Math.round(H*.045);cx.font=`600 ${g}px "Helvetica Neue",Helvetica,Arial,sans-serif`;cx.fillStyle='#93A2AB';cx.textAlign='center';cx.textBaseline='middle';
+    cx.fillText(tStart==null?'Caméra en pause pendant l’annonce (le son passe sur l’enceinte)':'La caméra redémarre…',W/2,H*.72);
+    overlay(tStart==null?null:Math.ceil((performance.now()-tStart)/10-1e-6),W,H);
+    requestAnimationFrame(standby);
+  }
   function goRace(){
     if(st!=='live'||!cam)return;
+    if(!window.MediaRecorder||!cvs.captureStream){note('L’enregistrement vidéo n’est pas disponible dans ce navigateur.');return}
     unlock();
-    if(!startRec())return;
-    st='rec';tStart=null;phase='À VOS MARQUES';cancelled=false;paint();
-    say('marques','À vos marques').then(()=>later(()=>{if(st!=='rec')return;phase='PRÊTS';paint();say('prets','Prêts').then(()=>later(fire,1300+Math.random()*1000))},1800));
+    stopCam();session('playback');
+    st='rec';rec=null;tStart=null;phase='À VOS MARQUES';cancelled=false;paint();standby();
+    later(()=>{if(st!=='rec')return;say('marques','À vos marques').then(()=>later(()=>{if(st!=='rec')return;phase='PRÊTS';paint();say('prets','Prêts').then(()=>later(fire,1300+Math.random()*1000))},1800))},600);
+  }
+  async function signal(){
+    const sig=cfg().signal||'partez',a=await running();let tail=.5;
+    if(!a||a.state!=='running'){
+      const el=bipFallback();try{el.currentTime=0;el.play()}catch(e){}
+      if(sig==='partez'&&cfg().voix){later(()=>speak('Partez !'),380);tail=1.4}
+      return {t:performance.now()+lat()*1000,tail};
+    }
+    const t0=a.currentTime+.1,p0=performance.now()+(t0-a.currentTime)*1000;
+    if(sig==='partez'&&clips.partez)tail=playClip('partez',t0)+.3;
+    else{beep(t0,.35,1000,.9);if(sig==='partez'&&cfg().voix){later(()=>speak('Partez !'),480);tail=1.5}}
+    return {t:p0+lat()*1000,tail};
   }
   async function fire(){
     if(st!=='rec')return;
-    const sig=cfg().signal||'partez';
-    const a=await running();
-    if(st!=='rec')return;
-    if(!a||a.state!=='running'){
-      // le son de l'iPad est bloqué pour Web Audio : bip de secours
-      const el=bipFallback();try{el.currentTime=0;el.play()}catch(e){}
-      tStart=performance.now()+lat()*1000;phase='PARTEZ';paint();later(()=>{phase='';},900);
-      if(sig==='partez'&&cfg().voix)later(()=>speak('Partez !'),380);
-      return;
-    }
-    const t0=a.currentTime+.1,p0=performance.now()+(t0-a.currentTime)*1000;
-    if(sig==='partez'&&clips.partez)playClip('partez',t0);
-    else{beep(t0,.35,1000,.9);if(sig==='partez'&&cfg().voix)later(()=>speak('Partez !'),480)}
-    tStart=p0+lat()*1000;phase='PARTEZ';later(paint,140);later(()=>{phase=''},1000);
+    const s=await signal();if(st!=='rec')return;
+    tStart=s.t;phase='PARTEZ';paint();later(()=>{phase=''},1000);
+    later(startCamRec,Math.round(s.tail*1000));
+  }
+  async function startCamRec(){
+    if(st!=='rec'||rec)return;
+    const ok=await openCam();
+    if(st!=='rec'||rec)return;
+    if(!ok){st='live';phase='';tStart=null;paint();return}
+    if(!startRec()){st='live';phase='';tStart=null;paint();return}
+    paint();
   }
   function stop(){
-    if(st!=='rec'||!rec)return;
+    if(st!=='rec')return;
     clearTimers();
+    if(!rec){st='live';phase='';tStart=null;paint();openCam();return}
     if(tStart==null)cancelled=true;
     recDur=(performance.now()-recT0)/1000;fps=Math.max(10,Math.min(120,frames.length/Math.max(.5,recDur)));
     st='wait';phase='';paint();
@@ -1150,49 +1179,11 @@ const CV=(function(){
     try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}}catch(e){if(e&&e.name==='AbortError')return}
     const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
   }
-  function again(){
+  function again(reopen){
     st='live';blob=null;taps=[];curCs=NaN;frames=[];
     try{vid.pause()}catch(e){}vid.removeAttribute('src');try{vid.load()}catch(e){}
     if(blobUrl){URL.revokeObjectURL(blobUrl);blobUrl=null}
-    paint();
-  }
-
-  /* ---- mesure du retard de l'enceinte ---- */
-  async function calibrate(){
-    const out=root.querySelector('#cv-calmsg'),btn=root.querySelector('[data-act="cv-cal"]');
-    if(st==='rec'){out.textContent='Arrête d’abord l’enregistrement.';return}
-    const a=audio();if(!a){out.textContent='Son indisponible.';return}
-    let mic;
-    session('play-and-record');
-    try{mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})}
-    catch(e){session('playback');out.textContent='Micro refusé : saisis la valeur à la main.';return}
-    btn.disabled=true;out.textContent='Écoute… 5 bips';
-    const src=a.createMediaStreamSource(mic),N=256,sp=a.createScriptProcessor(N,1,1),sr=a.sampleRate;
-    const res=[];let arm=null;
-    sp.onaudioprocess=e=>{
-      if(!arm)return;const d=e.inputBuffer.getChannelData(0),t0=e.playbackTime-N/sr;
-      for(let i=0;i<d.length;i++){const t=t0+i/sr,x=Math.abs(d[i]);
-        if(t<arm.t-.02){if(x>arm.noise)arm.noise=x;continue}
-        if(t>arm.t+1){arm.done(null);return}
-        if(x>Math.max(.05,arm.noise*4)){arm.done(t-arm.t);return}
-      }
-    };
-    src.connect(sp);sp.connect(a.destination);
-    for(let k=0;k<5;k++){
-      const r=await new Promise(done=>{const t=a.currentTime+.6;arm={t,noise:0,done:v=>{arm=null;done(v)}};beep(t,.15,1000,.8);setTimeout(()=>{if(arm){arm=null;done(null)}},2500)});
-      if(r!=null&&r>=0&&r<1)res.push(r);
-      out.textContent='Écoute… '+(k+1)+'/5';
-      await new Promise(r=>setTimeout(r,500));
-    }
-    try{sp.disconnect();src.disconnect()}catch(e){}
-    mic.getTracks().forEach(t=>t.stop());
-    try{ac.close()}catch(e){}ac=null;session('playback');
-    btn.disabled=false;
-    if(res.length<3){out.textContent='Mesure ratée (bips pas entendus). Rapproche l’enceinte du micro de l’iPad, monte le volume et recommence.';return}
-    res.sort((x,y)=>x-y);const m=res[Math.floor(res.length/2)];
-    cfg().lat=Math.round(m*1000)/1000;saveS();
-    root.querySelector('#cv-lat').value=String(cfg().lat).replace('.',',');
-    out.textContent='Retard mesuré : '+fmtN(m,3)+' s (enregistré).';
+    paint();if(reopen!==false&&root&&!root.hidden)openCam();
   }
 
   /* ---- interface ---- */
@@ -1211,10 +1202,10 @@ const CV=(function(){
       <div class="field"><label for="cv-vname">Voix de l’iPad (si pas d’enregistrement)</label><div class="row" style="flex-wrap:nowrap"><select id="cv-vname"></select><button class="btn" data-act="cv-test-voice">Tester</button></div></div>
       <p class="hint">Pour une voix bien plus naturelle : Réglages de l’iPad › Accessibilité › Contenu énoncé › Voix › Français, puis télécharge une voix « Premium » ou « améliorée ». Elle apparaîtra ici.</p>
       <div class="field"><label for="cv-sig">Signal de départ</label><select id="cv-sig"><option value="partez">« Partez ! » (ta voix, sinon bip puis voix de l’iPad)</option><option value="bip">Bip seul</option></select></div>
-      <h3>Enceinte</h3>
-      <div class="field"><label for="cv-lat">Retard du son de l’enceinte (s)</label><input type="text" inputmode="decimal" id="cv-lat" placeholder="auto (haut-parleur de l’iPad)"></div>
-      <p class="hint">Une enceinte Bluetooth joue le bip un peu après que l’iPad l’a envoyé, souvent 0,15 à 0,30 s. Le chrono est décalé de cette valeur pour partir au moment où les élèves entendent le bip. Pour la mesurer : enceinte connectée posée juste à côté de l’iPad, au calme, volume fort, puis « Mesurer ». À refaire si tu changes d’enceinte.</p>
-      <div class="row"><button class="btn" data-act="cv-cal">Mesurer (5 bips)</button></div><p id="cv-calmsg" class="hint"></p>
+      <h3>Réglage du départ du chrono</h3>
+      <p class="hint">Pose l’enceinte connectée près de toi et touche « Tester le départ » : tu entends le signal et le chrono ci-dessous démarre. Il doit quitter 0,00 pile quand tu entends le signal. S’il part <b>avant</b>, augmente le retard. S’il part <b>après</b>, diminue-le. Refais le test jusqu’à ce que ce soit synchro.</p>
+      <div class="cvoffrow"><button class="btn" data-act="cv-off" data-d="-0.05">−0,05</button><button class="btn" data-act="cv-off" data-d="-0.01">−0,01</button><div class="cvoffv"><small>Retard</small><b id="cv-offv">0,00 s</b></div><button class="btn" data-act="cv-off" data-d="0.01">+0,01</button><button class="btn" data-act="cv-off" data-d="0.05">+0,05</button></div>
+      <div class="cvoffrow"><button class="btn primary" data-act="cv-test">Tester le départ</button><span id="cv-testclock" class="cvtestclock">0,00</span></div>
       <div class="row" style="justify-content:flex-end"><button class="btn primary" data-act="cv-setok">OK</button></div></div></div>`;
     document.body.appendChild(root);
     cvs=root.querySelector('#cvc');cx=cvs.getContext('2d');vid=root.querySelector('#cvv');camV=root.querySelector('#cvcam');
@@ -1229,7 +1220,7 @@ const CV=(function(){
     const rv=st==='review';
     cvs.style.display=rv?'none':'block';vid.style.display=rv?'block':'none';
     root.querySelector('#cvep').disabled=st==='rec'||st==='wait';
-    root.querySelector('#cvst').innerHTML=st==='rec'?'<span class="pill live">● Enregistrement</span>':st==='wait'?'Préparation de la vidéo…':'';
+    root.querySelector('#cvst').innerHTML=st==='rec'?(rec?'<span class="pill live">● Enregistrement</span>':'<span class="pill">Annonce du départ</span>'):st==='wait'?'Préparation de la vidéo…':'';
     const bar=root.querySelector('#cvbar');
     if(st==='live')bar.innerHTML=`<button class="btn primary big cvmainbtn" data-act="cv-go">Départ</button><span class="cvhint">L’iPad annonce « À vos marques… Prêts… Partez ! ». Le chrono démarre au signal de départ.</span>`;
     else if(st==='rec')bar.innerHTML=`<button class="btn big cvmainbtn cvstop" data-act="cv-stop">${tStart==null?'Annuler le départ':'■ Arrêter l’enregistrement'}</button><span class="cvhint">${tStart==null?'Départ en cours…':'Arrête quand le dernier élève a franchi la ligne.'}</span>`;
@@ -1269,7 +1260,7 @@ const CV=(function(){
     if(st==='rec'&&!confirm('Arrêter l’enregistrement et fermer ?'))return;
     clearTimers();
     if(rec&&rec.state==='recording'){cancelled=true;try{rec.stop()}catch(e){}}
-    stopCam();again();st='off';root.hidden=true;document.documentElement.style.overflow='';
+    again(false);stopCam();st='off';root.hidden=true;document.documentElement.style.overflow='';
     try{if(wake)wake.release()}catch(e){}wake=null;
     render();
   }
@@ -1313,11 +1304,20 @@ const CV=(function(){
   }
   async function playOne(k){const a=await running();if(a)playClip(k,a.currentTime+.05)}
   async function delClip(k){await idbDel('voix:'+k);delete clips[k];clipBufs={};paintClips()}
-  function openSet(){const p=root.querySelector('#cvset');root.querySelector('#cv-voix').checked=!!cfg().voix;const l=cfg().lat;root.querySelector('#cv-lat').value=l==null?'':String(l).replace('.',',');root.querySelector('#cv-sig').value=cfg().signal||'partez';root.querySelector('#cv-calmsg').textContent='';root.querySelector('#cv-recmsg').textContent='';paintVoices();paintClips();p.hidden=false}
+  function paintOff(){const el=root.querySelector('#cv-offv');if(el)el.textContent=(lat()>0?'+':'')+fmtN(lat(),2)+' s'}
+  let testRaf=0;
+  async function testDepart(){
+    const el=root.querySelector('#cv-testclock');unlock();stopCam();session('playback');
+    cancelAnimationFrame(testRaf);el.textContent='…';
+    await new Promise(r=>setTimeout(r,700));
+    const s=await signal(),t=s.t;
+    const tick=()=>{const cs=Math.ceil((performance.now()-t)/10-1e-6);el.textContent=fmtCs(Math.max(0,cs));if(performance.now()-t<2500)testRaf=requestAnimationFrame(tick)};tick();
+  }
+  function openSet(){const p=root.querySelector('#cvset');if(st!=='live'&&st!=='review')return;stopCam();session('playback');root.querySelector('#cv-voix').checked=!!cfg().voix;paintOff();root.querySelector('#cv-testclock').textContent='0,00';root.querySelector('#cv-sig').value=cfg().signal||'partez';root.querySelector('#cv-recmsg').textContent='';paintVoices();paintClips();p.hidden=false}
   function closeSet(){
-    const v=parseNum(root.querySelector('#cv-lat').value);
-    if(v!=null&&(isNaN(v)||v<0||v>2)){root.querySelector('#cv-calmsg').textContent='Valeur entre 0 et 2 secondes, ou vide.';return}
-    cfg().voix=root.querySelector('#cv-voix').checked;cfg().lat=v;cfg().signal=root.querySelector('#cv-sig').value;cfg().voiceName=root.querySelector('#cv-vname').value;saveS();root.querySelector('#cvset').hidden=true;
+    cancelAnimationFrame(testRaf);
+    cfg().voix=root.querySelector('#cv-voix').checked;cfg().signal=root.querySelector('#cv-sig').value;cfg().voiceName=root.querySelector('#cv-vname').value;saveS();root.querySelector('#cvset').hidden=true;
+    if(st==='live')openCam();
   }
   function act(a,d){
     switch(a){
@@ -1334,7 +1334,8 @@ const CV=(function(){
       case 'cv-again':again();break;
       case 'cv-set':openSet();break;
       case 'cv-setok':closeSet();break;
-      case 'cv-cal':calibrate();break;
+      case 'cv-test':testDepart();break;
+      case 'cv-off':{cfg().lat=Math.max(-.5,Math.min(2,Math.round((lat()+ +d.d)*100)/100));saveS();paintOff();break}
       case 'cv-rec':recClip(d.k);break;
       case 'cv-play-clip':playOne(d.k);break;
       case 'cv-del-clip':delClip(d.k);break;
