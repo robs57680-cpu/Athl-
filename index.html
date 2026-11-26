@@ -232,7 +232,8 @@ input[type=text].disp{font-family:var(--f-display);font-size:36px;font-weight:70
 .cv[hidden]{display:none}
 .cvtop{display:flex;align-items:center;gap:10px;padding:8px 12px;flex-wrap:wrap}
 .cvtitle{font-family:var(--f-display);font-size:22px;text-transform:uppercase;letter-spacing:.03em}
-.cvtop select{width:auto;min-width:140px;background:#17222A;color:#EDF1F2;border-color:#2C3C47}
+.cvseg{display:inline-flex;border:1.5px solid #2C3C47;border-radius:10px;overflow:hidden;background:#17222A}.cvseg button{border:0;background:none;color:#93A2AB;font-family:var(--f-display);font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.03em;padding:6px 16px;min-height:44px}.cvseg button+button{border-left:1.5px solid #2C3C47}.cvseg button[aria-pressed="true"]{background:var(--accent);color:#fff}.cvseg button:disabled{opacity:.5}
+.cvepname{background:#17222A;border:1.5px solid var(--accent);border-radius:10px;padding:8px 10px;font-size:15px}.cvepname b{font-family:var(--f-display);font-size:20px;text-transform:uppercase;color:var(--accent)}
 .cvst{flex:1;color:#93A2AB;font-size:14px}
 .cvtop .btn,.cvbar .btn,.cvside .btn{background:#17222A;color:#EDF1F2;border-color:#2C3C47}
 .cvtop .btn.primary,.cvbar .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -1190,7 +1191,7 @@ const CV=(function(){
   function note(t){const el=root&&root.querySelector('#cvnote');if(el){el.textContent=t;el.hidden=!t}}
   function build(){
     root=document.createElement('div');root.className='cv';root.hidden=true;
-    root.innerHTML=`<div class="cvtop"><button class="btn" data-act="cv-close">← Fermer</button><b class="cvtitle">Chrono vidéo</b><select id="cvep" aria-label="Épreuve"></select><span id="cvst" class="cvst"></span><button class="btn" data-act="cv-set" aria-label="Réglages">Réglages</button></div>
+    root.innerHTML=`<div class="cvtop"><button class="btn" data-act="cv-close">← Fermer</button><b class="cvtitle">Chrono vidéo</b><div class="cvseg" id="cvep" role="group" aria-label="Épreuve"></div><span id="cvst" class="cvst"></span><button class="btn" data-act="cv-set" aria-label="Réglages">Réglages</button></div>
     <div class="cvmain"><div class="cvstage"><canvas id="cvc"></canvas><video id="cvv" playsinline muted preload="auto"></video><p id="cvnote" class="cvnote" hidden></p></div><aside class="cvside" id="cvside"></aside></div>
     <div class="cvbar" id="cvbar"></div>
     <video id="cvcam" class="cvcam" playsinline muted autoplay></video>
@@ -1213,13 +1214,12 @@ const CV=(function(){
     vid.addEventListener('pause',()=>{readFrame();const b=root.querySelector('#cvplay');if(b)b.textContent='▶ Lecture'});
     vid.addEventListener('play',()=>{const b=root.querySelector('#cvplay');if(b)b.textContent='❚❚ Pause'});
     vid.addEventListener('timeupdate',()=>{if(!vid.paused)paintTime()});
-    root.querySelector('#cvep').addEventListener('change',e=>{epId=e.target.value;paintSide()});
   }
   function paint(){
     if(!root)return;
     const rv=st==='review';
     cvs.style.display=rv?'none':'block';vid.style.display=rv?'block':'none';
-    root.querySelector('#cvep').disabled=st==='rec'||st==='wait';
+    const lock=st==='rec'||st==='wait';root.querySelectorAll('#cvep button').forEach(b=>{b.disabled=lock;b.setAttribute('aria-pressed',b.dataset.id===epId)});
     root.querySelector('#cvst').innerHTML=st==='rec'?(rec?'<span class="pill live">● Enregistrement</span>':'<span class="pill">Annonce du départ</span>'):st==='wait'?'Préparation de la vidéo…':'';
     const bar=root.querySelector('#cvbar');
     if(st==='live')bar.innerHTML=`<button class="btn primary big cvmainbtn" data-act="cv-go">Départ</button><span class="cvhint">L’iPad annonce « À vos marques… Prêts… Partez ! ». Le chrono démarre au signal de départ.</span>`;
@@ -1243,13 +1243,13 @@ const CV=(function(){
     const tp=taps.length?`<p class="cvlbl">Cette course</p>`+taps.map((t,i)=>{const el=c.eleves.find(x=>x.id===t.id);return `<div class="cvtap"><span>${esc(el?el.prenom+' '+el.nom.toUpperCase():'?')}</span><b>${esc(fmtCs(Math.round(t.v*100)))}</b><button class="btn small" data-act="cv-undo" data-i="${i}">Retirer</button></div>`}).join(''):'';
     const rows=sortEleves(c).map(el=>{const en=s?entriesOf(el,ep.id).find(e=>e.s===s.id):null;const vals=en?en.e.map(v=>fmtPerf(v,ep.u)).join(' · '):'';
       return `<button class="cvstu" data-act="cv-tap" data-id="${el.id}" ${rv?'':'disabled'}><span class="dot" style="--sc:${stuCol(el)}"></span><span class="nm"><b>${esc(el.prenom)}</b> ${esc(el.nom.toUpperCase())}</span><small>${esc(vals)}</small></button>`}).join('');
-    side.innerHTML=`<p class="cvlbl">${rv?'Pause sur l’arrivée d’un élève, puis touche son nom':'Élèves · '+esc(ep.nom)}</p>`+tp+(rows||'<p class="cvhint">Aucun élève dans la classe.</p>');
+    side.innerHTML=`<div class="cvepname">Temps enregistrés en <b>${esc(ep.nom)}</b></div><p class="cvlbl">${rv?'Pause sur l’arrivée d’un élève, puis touche son nom':'Élèves'}</p>`+tp+(rows||'<p class="cvhint">Aucun élève dans la classe.</p>');
   }
   async function open(){
     const eps=timeEps();if(!eps.length){toast('Aucune épreuve chronométrée dans les barèmes');return}
     if(!root)build();
-    if(!epId||!eps.some(e=>e.id===epId))epId=(eps.find(e=>e.id==='sprint')||eps[0]).id;
-    root.querySelector('#cvep').innerHTML=eps.map(e=>`<option value="${esc(e.id)}"${e.id===epId?' selected':''}>${esc(e.nom)}</option>`).join('');
+    if(!epId)epId=cfg().ep;if(!epId||!eps.some(e=>e.id===epId))epId=(eps.find(e=>e.id==='sprint')||eps[0]).id;
+    root.querySelector('#cvep').innerHTML=eps.map(e=>`<button type="button" data-act="cv-ep" data-id="${esc(e.id)}" aria-pressed="${e.id===epId}">${esc(e.nom)}</button>`).join('');
     root.hidden=false;document.documentElement.style.overflow='hidden';
     st='live';phase='';taps=[];note('');paint();loadClips();
     try{speechSynthesis.getVoices();speechSynthesis.onvoiceschanged=()=>{if(!root.querySelector('#cvset').hidden)paintVoices()}}catch(e){}
@@ -1334,6 +1334,7 @@ const CV=(function(){
       case 'cv-again':again();break;
       case 'cv-set':openSet();break;
       case 'cv-setok':closeSet();break;
+      case 'cv-ep':{if(st==='rec'||st==='wait')return;epId=d.id;cfg().ep=epId;saveS();root.querySelectorAll('#cvep button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.id===epId));paintSide();const ep=epById(epId);toast('Les temps iront en '+(ep?ep.nom:''));break}
       case 'cv-test':testDepart();break;
       case 'cv-off':{cfg().lat=Math.max(-.5,Math.min(2,Math.round((lat()+ +d.d)*100)/100));saveS();paintOff();break}
       case 'cv-rec':recClip(d.k);break;
